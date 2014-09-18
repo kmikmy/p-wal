@@ -1,0 +1,24 @@
+
+# MacOS
+.DS_Store
+*.dSYM
+
+#make
+*.d
+
+# vim
+*.swp
+
+# emacs
+*~
+\#*\#
+
+# c/c++/objc
+*.o
+
+# exefile
+*.exe
+
+# aries
+data/*
+!.gitkeep

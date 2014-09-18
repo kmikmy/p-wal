@@ -1,0 +1,10 @@
+data/: システムログやページなどの書き込むデータが集まっている。
+　　　ログはHDDの場合は/work下にあり, Fusionの場合は/dev/fioaに直接書き込まれる。
+script/: 測定用のスクリプトが入っている。
+
+tool/: ツール群を含んでいる。相対パスの指定の関係でtoolディレクトリに入って実行する。
+ init.exe - ../data/system.dat(xidと前回の終了ステータス), /work/kamiya/log.datをクリア。
+ init_fio.exe - ../data/system.dat(xidと前回の終了ステータス), /dev/fioaのログをクリア。
+ write_pages.exe - ../data/pages.datにデータを書き込む
+ read_pages.exe - ../data/pages.datのデータを読み込む
+ read_logs.exe - /work/kamiya/log.datのログを読み込む
