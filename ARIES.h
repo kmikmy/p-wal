@@ -175,8 +175,9 @@ class Logger
 
  public:
   static const char* logpath;
-  static int log_write(Log *log);
+  static int log_write(Log *log, int th_id);
   static void log_flush();
+  static void log_all_flush();
   static void log_debug(Log log);
 };
 

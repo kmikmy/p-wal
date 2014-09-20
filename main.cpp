@@ -7,7 +7,7 @@
 enum Mode { NORMAL_EXIT=0, T_START=1, FAILURE=2 };
 using namespace std;
 
-extern void start_transaction(int);
+extern void batch_start_transaction(int);
 extern pthread_t gen_queue_thread(int _ntrans);
 extern void gen_pqueue_thread(int _nthread);
 
@@ -53,7 +53,7 @@ int main(int argc, char *argv[]){
 static void 
 unfixed_thread_mode(int n){
   ARIES_SYSTEM::db_init();
-  start_transaction(n);
+  batch_start_transaction(n);
   ARIES_SYSTEM::normal_exit();
 }
 
@@ -91,7 +91,7 @@ void interact_mode(){
     cin >> m;
     
     switch (m){
-    case T_START: start_transaction(1); break;
+    case T_START: batch_start_transaction(1); break;
     case NORMAL_EXIT: ARIES_SYSTEM::normal_exit(); exit(0);
     case FAILURE: ARIES_SYSTEM::abnormal_exit(); exit(0);
     default: cout << "The mode isn't exist: " << m << endl; 

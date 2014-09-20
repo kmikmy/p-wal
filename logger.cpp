@@ -2,12 +2,14 @@
 #include <iostream>
 
 #define NUM_GROUP_COMMIT 10
+#define NUM_MAX_CORE 7
+ // 1GB
+#define LOG_OFFSET (1073741824)
 
 #ifndef FIO
 const char* Logger::logpath = "/work/kamiya/log.dat";
 #else
 const char* Logger::logpath = "/dev/fioa";
-const uint32_t log_offset = 1073741824; // 1GB
 #endif
 
 static int log_fd;
@@ -48,24 +50,27 @@ class LogBuffer{
   }
   
 
+  /*
+    logHeaderはbaseアドレスに位置し、Logがその後に続く
+   */
   void 
-  flush()
+  flush(uint64_t base)
   {
     LogHeader lh;
     
-    lseek(log_fd, 0, SEEK_SET);
+    lseek(log_fd, base, SEEK_SET);
     if(-1 == read(log_fd, &lh, sizeof(LogHeader))){
       perror("read"); exit(1);
     };
     unsigned save_count = lh.count;
     lh.count += size();
   
-    lseek(log_fd, 0, SEEK_SET);
+    lseek(log_fd, base, SEEK_SET);
     if(-1 == write(log_fd, &lh, sizeof(LogHeader))){;
       perror("write"); exit(1);
     }
 
-    off_t pos = sizeof(LogHeader) + save_count * sizeof(Log);
+    off_t pos = base + sizeof(LogHeader) + save_count * sizeof(Log);
     lseek(log_fd, pos, SEEK_SET);
     // lseek(log_fd, 0, SEEK_END);
     // fusionではSEEK_ENDできない
@@ -83,6 +88,9 @@ class LogBuffer{
   }
   bool full(){
     return idx == MAX_LOG_SIZE;
+  }
+  bool empty(){
+    return idx == 0;
   }
   void push(const Log &log){
     if(size() >= MAX_LOG_SIZE){
@@ -116,7 +124,7 @@ class LogBuffer{
   
 };
 
-static LogBuffer logBuffer;
+static LogBuffer logBuffer[NUM_MAX_CORE];
 static std::mutex log_mtx;
 
 std::ostream& operator<<( std::ostream& os, OP_TYPE& opt){
@@ -144,28 +152,30 @@ std::ostream& operator<<( std::ostream& os, LOG_TYPE& type){
   return os;
 }
 
-int Logger::log_write(Log *log){
+int 
+Logger::log_write(Log *log, int th_id=0){
   std::lock_guard<std::mutex> lock(log_mtx);  
 
-  //  std::cout << logBuffer.next_lsn() << std::endl;
-  log->LSN = logBuffer.next_lsn();
-  logBuffer.push(*log);
+  //  std::cout << logBuffer[th_id].next_lsn() << std::endl;
+  log->LSN = logBuffer[th_id].next_lsn();
+  logBuffer[th_id].push(*log);
 
-  if( (log->Type == END && logBuffer.num_commit == NUM_GROUP_COMMIT ) || logBuffer.full() ){
-    log_flush();
+  if( (log->Type == END && logBuffer[th_id].num_commit == NUM_GROUP_COMMIT ) || logBuffer[th_id].full() ){
+    logBuffer[th_id].flush(th_id * LOG_OFFSET);
   }
 
   return 0;
 }
 
-void 
-Logger::log_flush()
-{
-  logBuffer.flush();
+void
+Logger::log_all_flush(){
+  for(int i=0;i<NUM_MAX_CORE;i++)
+    if(!logBuffer[i].empty())
+      logBuffer[i].flush(i * LOG_OFFSET);
 }
 
-
-void Logger::log_debug(Log log){
+void 
+Logger::log_debug(Log log){
   std::cout << "LSN: " << log.LSN;
   std::cout << ", TransID " << log.TransID;
   std::cout << ", Type: " << log.Type;

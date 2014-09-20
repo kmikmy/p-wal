@@ -21,10 +21,10 @@ extern map<uint32_t, uint32_t> DPT;
 
 extern void remove_transaction_xid(uint32_t xid);
 
-void WAL_update(OP op, uint32_t xid, int pageID);
+void WAL_update(OP op, uint32_t xid, int pageID, int th_id);
 void begin_checkpoint();
-void begin(uint32_t xid);
-void end(uint32_t xid);
+void begin(uint32_t xid, int th_id);
+void end(uint32_t xid, int th_id);
 void rollback(uint32_t xid);
 
 
@@ -64,7 +64,7 @@ lock_release(set<uint32_t> &lock_table){
 
 
 static int
-process_transaction(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num){
+process_transaction(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int th_id){
   set<uint32_t> my_lock_table;
   OP op;
   uint32_t pageID;
@@ -72,7 +72,7 @@ process_transaction(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num){
   struct timeval start_t, end_t;
   gettimeofday(&start_t, NULL);
   
-  begin(xid);  // begin log write  
+  begin(xid, th_id);  // begin log write  
   for(int i=0;i<update_num;i++){
     op = ops[i];
     pageID = page_ids[i];
@@ -110,9 +110,9 @@ process_transaction(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num){
     else{ 
       ; //既に該当ページのロックを獲得している場合は何もしない
     }
-    WAL_update(op, xid, pageID);
+    WAL_update(op, xid, pageID, th_id);
   }
-  end(xid); // end log write
+  end(xid, th_id); // end log write
 
   gettimeofday(&end_t, NULL);
 
@@ -130,6 +130,8 @@ process_transaction(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num){
    実際にTransaction処理を行っているのは、process_transaction()。
    命令を構成したり、ロールバックした場合トランザクションを再実行するための
    ラッパ関数のようなもの。
+
+   トランザクションIDとコアIDを渡す
  */
 void *
 th_transaction(void *_xid)  // _xid is uint32_t* type.
@@ -153,13 +155,36 @@ th_transaction(void *_xid)  // _xid is uint32_t* type.
   
   //  cout << "th_transaction: " << xid << endl;
   // transactionがrollbackしたら何度でも繰り返す
-  while(process_transaction(xid, ops, page_ids, update_num) == -1);
+  while(process_transaction(xid, ops, page_ids, update_num, 0) == -1);
 
   return NULL;
 }
 
+void
+start_transaction(uint32_t xid, int th_id) 
+{
+  /* 命令群を構成する */
+  OP ops[MAX_UPDATE];
+  uint32_t page_ids[MAX_UPDATE];
+  int update_num = rand() % MAX_UPDATE + 1; // UPDATE 回数
 
-void WAL_update(OP op, uint32_t xid, int pageID){
+#ifdef EX1
+  update_num = 1;
+#endif
+
+  for(int i=0;i<update_num;i++){
+    operation_select(&ops[i]);
+    page_select(&page_ids[i]);
+  }
+  
+  //  cout << "th_transaction: " << xid << endl;
+  // transactionがrollbackしたら何度でも繰り返す
+  while(process_transaction(xid, ops, page_ids, update_num, th_id) == -1);
+}
+
+
+
+void WAL_update(OP op, uint32_t xid, int pageID, int th_id){
 
   PageBufferEntry *pbuf = &pageBuffers[pageID];
   // fixed flagがなければファイルから読み込んでfixする
@@ -210,7 +235,7 @@ void WAL_update(OP op, uint32_t xid, int pageID){
 
   //  ARIES_SYSTEM::transtable_debug();
 
-  Logger::log_write(&log);
+  Logger::log_write(&log, th_id);
 
   trans_table[xid].LastLSN = log.LSN; // Transaction tableの更新
 
@@ -230,13 +255,13 @@ void WAL_update(OP op, uint32_t xid, int pageID){
 }
 
 void 
-begin(uint32_t xid){
+begin(uint32_t xid, int th_id=0){
   Log log;
   memset(&log,0,sizeof(log));
   log.TransID = xid;
   log.Type = BEGIN;
 
-  Logger::log_write(&log);
+  Logger::log_write(&log,th_id);
   trans_table[xid].LastLSN = log.LSN;
 #ifdef DEBUG
   Logger::log_debug(log);  
@@ -244,7 +269,7 @@ begin(uint32_t xid){
 }
 
 void 
-end(uint32_t xid){
+end(uint32_t xid, int th_id=0){
 
   // if(rand()%3 == 0){ // 33%の確率でENDログがフラッシュされない
   //   cout << "end log wasn't written." << endl;
@@ -257,7 +282,7 @@ end(uint32_t xid){
   log.Type = END;
   log.PrevLSN = trans_table[xid].LastLSN;
 
-  Logger::log_write(&log);
+  Logger::log_write(&log,th_id);
   trans_table[xid].LastLSN = log.LSN;
 #ifdef DEBUG
   Logger::log_debug(log);  
@@ -318,7 +343,9 @@ rollback(uint32_t xid){
       clog.after = log.before;
 
 
-      ret = Logger::log_write(&clog);
+      // compensation log recordをどこに書くかという問題はひとまず置いておく
+      // とりあえず全部同じログブロックに書く
+      ret = Logger::log_write(&clog, 0); 
       trans_table[xid].LastLSN = clog.LSN;
 
 #ifdef DEBUG
@@ -339,7 +366,7 @@ rollback(uint32_t xid){
       // clog.before isn't needed because compensation log record is redo-only.
       clog.UndoNxtLSN = log.PrevLSN;
 
-      Logger::log_write(&clog);
+      Logger::log_write(&clog, 0);
       //      trans_table[xid].LastLSN = clog.LSN;
 #ifdef DEBUG
       Logger::log_debug(clog);

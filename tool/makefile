@@ -31,9 +31,13 @@ read_master_record: read_master_record.cpp
 
 read_logs: read_logs.cpp
 	$(CC) $(CFLAGS) -o read_logs.exe read_logs.cpp
-
 read_fio: read_logs.cpp
 	$(CC) $(CFLAGS) -DFIO -o read_fio.exe read_logs.cpp
+
+#read_logs: read_fio.cpp
+#	$(CC) $(CFLAGS) -o read_logs.exe read_fio.cpp
+#read_fio: read_fio.cpp
+#	$(CC) $(CFLAGS) -DFIO -o read_fio.exe read_fio.cpp
 
 init: init.cpp
 	$(CC) $(CFLAGS) -o init.exe init.cpp

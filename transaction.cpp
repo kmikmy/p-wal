@@ -34,6 +34,7 @@ extern PageBufferEntry pageBuffers[PAGE_N];
 extern map<uint32_t, uint32_t> DPT;
 
 extern void* th_transaction(void *_xid);
+extern void start_transaction(uint32_t xid, int th_id);
 static void flush_page();
 
 std::istream& 
@@ -90,7 +91,7 @@ remove_transaction_xid(uint32_t xid){
 }
 
 void 
-start_transaction(int num){
+batch_start_transaction(int num){
   for(int i=0;i<num;i++){
     Transaction trans;
     trans.TransID = ARIES_SYSTEM::xid_inc();
@@ -171,7 +172,10 @@ manage_queue_thread(void *_ntrans){
 
 static
 void *
-process_queue_thread(void *null){
+process_queue_thread(void *_th_id){
+  int th_id = *((int *)_th_id);
+  free(_th_id);
+
   Transaction trans;
 
   /* queueにタスクがある or これからまだタスクが追加される　間はループ */
@@ -192,10 +196,7 @@ process_queue_thread(void *null){
     append_transaction(trans);
 
     // transactionの開始
-    uint32_t *_xid = (uint32_t *)malloc(sizeof(uint32_t));
-    *_xid = trans.TransID;
-    
-    th_transaction(_xid);
+    start_transaction(trans.TransID, th_id);
   }
   return NULL;
 }
@@ -231,7 +232,10 @@ gen_pqueue_thread(int nthread){
     pthread_t th[MAX_PQUEUE_THREAD];
     
     for(int i=0; i<nthread; i++){
-      if( pthread_create(&th[i], NULL, process_queue_thread, NULL) != 0 ){
+      int *_th_id = (int *)malloc(sizeof(int));
+      *_th_id=i;
+
+      if( pthread_create(&th[i], NULL, process_queue_thread, _th_id) != 0 ){
 	perror("pthread_create()");
 	exit(1);
       }
