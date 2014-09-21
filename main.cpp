@@ -3,6 +3,7 @@
 #include <iostream>
 #include <pthread.h>
 
+#define NUM_MAX_CORE 16
 
 enum Mode { NORMAL_EXIT=0, T_START=1, FAILURE=2 };
 using namespace std;
@@ -40,6 +41,13 @@ int main(int argc, char *argv[]){
     //unfixed_thread_mode(atoi(argv[1]));
   }
   else if(argc == 3){
+    int th_num = atoi(argv[2]);
+    unsigned int cpunum = sysconf(_SC_NPROCESSORS_ONLN);
+
+    if(th_num > NUM_MAX_CORE-1 || th_num > cpunum-1){
+      cout << "Usage: ./a.out xact_num th_num(<=" << (NUM_MAX_CORE<cpunum?NUM_MAX_CORE-1:cpunum-1) << ")" << endl;
+      return 0;
+    }
     fixed_thread_mode(atoi(argv[1]), atoi(argv[2]));
   }
 

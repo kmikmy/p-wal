@@ -2,12 +2,13 @@
 #include <iostream>
 #include <cstdlib>
 #include <pthread.h>
+#include <sched.h>
 #include <map>
 
 #define MAX_QUEUE_SIZE 32
 
 /* processing thread の 最大数 */
-#define MAX_PQUEUE_THREAD 32
+#define MAX_PQUEUE_THREAD 15
 //#define DEBUG 1
 
 using namespace std;
@@ -141,6 +142,12 @@ manage_queue_thread(void *_ntrans){
   int cnt = ntrans;
   free(_ntrans);
 
+  int cpu = 0;
+  cpu_set_t mask;
+  /* initialize and set cpu flag */
+  CPU_ZERO(&mask);
+  CPU_SET(cpu, &mask);
+
   while(cnt > 0){
     trans_queue.lock(); // critical section start
 
@@ -177,6 +184,14 @@ process_queue_thread(void *_th_id){
   free(_th_id);
 
   Transaction trans;
+
+  int cpu = th_id+1;
+  cpu_set_t mask;
+  /* initialize and set cpu flag */
+  CPU_ZERO(&mask);
+  CPU_SET(cpu, &mask);
+
+
 
   /* queueにタスクがある or これからまだタスクが追加される　間はループ */
   while(!trans_queue.empty() || thread_flag){
