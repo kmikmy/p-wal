@@ -29,6 +29,7 @@ class LogBuffer{
 
  public:
   Log logs[MAX_LOG_SIZE];
+  std::mutex log_mtx;
   unsigned num_commit;
 
   LogBuffer(){
@@ -125,7 +126,7 @@ class LogBuffer{
 };
 
 static LogBuffer logBuffer[NUM_MAX_CORE];
-static std::mutex log_mtx;
+
 
 std::ostream& operator<<( std::ostream& os, OP_TYPE& opt){
   switch(opt){
@@ -154,7 +155,7 @@ std::ostream& operator<<( std::ostream& os, LOG_TYPE& type){
 
 int 
 Logger::log_write(Log *log, int th_id=0){
-  std::lock_guard<std::mutex> lock(log_mtx);  
+  std::lock_guard<std::mutex> lock(logBuffer[th_id].log_mtx);  
 
   //  std::cout << logBuffer[th_id].next_lsn() << std::endl;
   log->LSN = logBuffer[th_id].next_lsn();
