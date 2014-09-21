@@ -144,9 +144,13 @@ manage_queue_thread(void *_ntrans){
 
   int cpu = 0;
   cpu_set_t mask;
+
   /* initialize and set cpu flag */
   CPU_ZERO(&mask);
   CPU_SET(cpu, &mask);
+
+  /* set affinity to current process */
+  sched_setaffinity(0, sizeof(mask), &mask);
 
   while(cnt > 0){
     trans_queue.lock(); // critical section start
@@ -187,9 +191,13 @@ process_queue_thread(void *_th_id){
 
   int cpu = th_id+1;
   cpu_set_t mask;
+
   /* initialize and set cpu flag */
   CPU_ZERO(&mask);
   CPU_SET(cpu, &mask);
+
+  /* set affinity to current process */
+  sched_setaffinity(0, sizeof(mask), &mask);
 
 
 
