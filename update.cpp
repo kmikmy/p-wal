@@ -198,7 +198,7 @@ void WAL_update(OP op, uint32_t xid, int pageID, int th_id){
     pbuf->modified_flag = true;
 
     int fd;
-    if( (fd = open("data/pages.dat", O_CREAT | O_RDONLY )) == -1){
+    if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat", O_CREAT | O_RDONLY )) == -1){
       perror("open");
       exit(1);
     }

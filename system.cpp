@@ -55,7 +55,7 @@ static void
 load_master_record(){
   trans_table.clear();
 
-  if( (system_fd = open("data/system.dat", O_RDWR | O_CREAT )) == -1 ){
+  if( (system_fd = open("/home/kamiya/hpcs/aries/data/system.dat", O_RDWR | O_CREAT )) == -1 ){
     perror("open");
     exit(1);
   }
@@ -241,7 +241,7 @@ page_table_debug(){
 static void 
 page_undo_write(unsigned n){
   int fd;
-  if( (fd = open("data/pages.dat",  O_WRONLY )) == -1){
+  if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat",  O_WRONLY )) == -1){
     perror("open");
     exit(1);
   }
@@ -259,7 +259,7 @@ static bool
 redo_test(){
   int fd;
   
-  if( (fd = open("data/pages.dat",  O_RDONLY )) == -1){
+  if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat",  O_RDONLY )) == -1){
     perror("open");
     exit(1);
   }
