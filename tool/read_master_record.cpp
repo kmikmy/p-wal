@@ -13,7 +13,7 @@ int main(){
 static void 
 read_master_record(){
   int system_fd;
-  if( (system_fd = open("../data/system.dat", O_RDWR | O_SYNC | O_CREAT)) == -1 ){
+  if( (system_fd = open("/home/kamiya/hpcs/aries/data/system.dat", O_RDWR | O_SYNC | O_CREAT)) == -1 ){
     perror("open");
     exit(1);
   }

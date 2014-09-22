@@ -21,7 +21,7 @@ void init(){
   int fd;
   MasterRecord master_record;
 
-  if( (fd = open("../data/system.dat", O_RDWR | O_SYNC | O_CREAT )) == -1 ){
+  if( (fd = open("/home/kamiya/hpcs/aries/data/system.dat", O_RDWR | O_SYNC | O_CREAT )) == -1 ){
     perror("open");
     exit(1);
   }
