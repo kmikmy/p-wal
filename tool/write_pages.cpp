@@ -16,7 +16,7 @@ int main(){
   srand(21);
 
 
-  if( (fd = open("../data/pages.dat", O_TRUNC | O_CREAT | O_WRONLY )) == -1){
+  if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat", O_TRUNC | O_CREAT | O_WRONLY )) == -1){
     perror("open");
     exit(1);
   }

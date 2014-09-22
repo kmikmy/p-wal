@@ -11,7 +11,7 @@ using namespace std;
 int main(){
   int fd;
 
-  if( (fd = open("../data/pages.dat",  O_RDONLY )) == -1){
+  if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat",  O_RDONLY )) == -1){
     perror("open");
     exit(1);
   }

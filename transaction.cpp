@@ -117,7 +117,7 @@ construct_transaction(Transaction *trans){
 void 
 flush_page(){
   int fd;
-  if( (fd = open("data/pages.dat", O_CREAT | O_WRONLY )) == -1){
+  if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat", O_CREAT | O_WRONLY )) == -1){
     perror("open");
     exit(1);
   }
