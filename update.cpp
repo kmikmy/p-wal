@@ -128,12 +128,13 @@ process_transaction(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, i
 
 /* 
    Tranasction id を渡して、Transactionを行う。
-   この関数は、unfixed_thread_mode, fixed_thread_modeから共に呼び出される。
+   この関数は、unfixed_thread_modeから呼び出される。
+   fixed_thread_modeからはstart_transactionが呼び出される。
+   これらはスレッドとして割り当てられる関数がそうでないかの違いでしかない。
+
    実際にTransaction処理を行っているのは、process_transaction()。
    命令を構成したり、ロールバックした場合トランザクションを再実行するための
    ラッパ関数のようなもの。
-
-   トランザクションIDとコアIDを渡す
  */
 void *
 th_transaction(void *_xid)  // _xid is uint32_t* type.
@@ -166,6 +167,10 @@ update_num = 46;
   return NULL;
 }
 
+
+/*
+  XIDとスレッドIDを渡す
+*/
 void
 start_transaction(uint32_t xid, int th_id) 
 {
@@ -176,6 +181,10 @@ start_transaction(uint32_t xid, int th_id)
 
 #ifdef EX1
   update_num = 1;
+#elsif EX10
+update_num = 10;
+#elsif EX46
+update_num = 46;
 #endif
 
   for(int i=0;i<update_num;i++){
