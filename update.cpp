@@ -15,7 +15,7 @@ using namespace std;
 
 enum UP_OPTYPE { _EXIT, _INC, _DEC, _SUBST, _SYSTEM_FAILURE };
 
-const uint32_t Delta = 500000; // Delta(ms)でロックが獲得できない場合はrollbackする。
+const uint32_t Delta = 500; // Delta(ms)でロックが獲得できない場合はrollbackする。
 
 extern TransTable trans_table;
 extern PageBufferEntry pageBuffers[PAGE_N];
@@ -150,9 +150,9 @@ th_transaction(void *_xid)  // _xid is uint32_t* type.
 #ifdef EX1
   update_num = 1;
 #elsif EX10
-update_num = 10;
+  update_num = 10;
 #elsif EX46
-update_num = 46;
+  update_num = 46;
 #endif
 
   for(int i=0;i<update_num;i++){

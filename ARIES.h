@@ -12,7 +12,7 @@
 #include <vector>
 
 #define PAGE_N (4096*16)
-#define MAX_UPDATE 5
+#define MAX_UPDATE 100
 
 enum LOG_TYPE { UPDATE, COMPENSATION, PREPARE, BEGIN, END, OSfile_return};
 enum OP_TYPE { NONE, INC,DEC,SUBST };
