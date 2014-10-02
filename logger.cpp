@@ -8,6 +8,8 @@
 
 #ifndef FIO
 const char* Logger::logpath = "/work/kamiya/log.dat";
+// 複数のログバッファを利用してディスクにフラッシュするシーケンシャルログ方式は単一のロックオブジェクトが必要
+std::mutex global_log_mtx; 
 #else
 const char* Logger::logpath = "/dev/fioa";
 #endif
@@ -57,6 +59,11 @@ class LogBuffer{
   void 
   flush(uint64_t base)
   {
+#ifndef FIO // シーケンシャルログ方式の場合全てのログバッファが同じ箇所に書き込むことになるため、ロックが必要になる
+    base = 0;
+    std::lock_guard<std::mutex> lock(global_log_mtx);  
+#endif
+
     LogHeader lh;
     
     lseek(log_fd, base, SEEK_SET);
