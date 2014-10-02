@@ -2,16 +2,16 @@
 
 using namespace std;
 
-extern PageBufferEntry pageBuffers[PAGE_N];
+extern PageBufferEntry page_table[PAGE_N];
 
 bool
 is_page_fixed(int page_id){
-  return pageBuffers[page_id].fixed_flag;
+  return page_table[page_id].fixed_flag;
 }
 
 void
 page_fix(int page_id){
-  PageBufferEntry *pbuf = &pageBuffers[page_id];
+  PageBufferEntry *pbuf = &page_table[page_id];
   pbuf->fixed_flag = true;
     
   int fd;

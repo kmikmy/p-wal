@@ -16,7 +16,7 @@ Page pages[PAGE_N];
 MasterRecord ARIES_SYSTEM::master_record;
 
 extern TransTable trans_table;
-extern PageBufferEntry pageBuffers[PAGE_N];
+extern PageBufferEntry page_table[PAGE_N];
 
 static std::mutex mr_mtx;
 static int system_fd;
@@ -43,12 +43,11 @@ void
 ARIES_SYSTEM::db_init(){
   load_master_record();
   pbuf_lock_init();
-
 }
 static void 
 pbuf_lock_init(){
   for(int i=0;i<PAGE_N;i++)
-    pthread_rwlock_init(&pageBuffers[i].lock, NULL);
+    pthread_rwlock_init(&page_table[i].lock, NULL);
 }
 
 static void
@@ -181,9 +180,9 @@ redo(){
       if(!is_page_fixed(idx))
 	page_fix(idx);
       
-      if(pageBuffers[idx].page.page_LSN <= log.LSN){
-	pageBuffers[idx].page.value = log.after;
-	//	pageBuffers[idx].page.page_LSN = log.LSN;  必要ない
+      if(page_table[idx].page.page_LSN <= log.LSN){
+	page_table[idx].page.value = log.after;
+	//	page_table[idx].page.page_LSN = log.LSN;  必要ない
       }
     }
   }
@@ -232,7 +231,7 @@ static void
 page_table_debug(){
   cout << endl << "**************** Page Table ****************" << endl;
   for(int i=0;i<PAGE_N;i++)
-    cout << "page[" << pageBuffers[i].page.pageID << "]: page_LSN=" << pageBuffers[i].page.page_LSN << ", value=" << pageBuffers[i].page.value << endl;
+    cout << "page[" << page_table[i].page.pageID << "]: page_LSN=" << page_table[i].page.page_LSN << ", value=" << page_table[i].page.value << endl;
   cout << endl;
 }
 

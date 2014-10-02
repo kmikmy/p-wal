@@ -7,8 +7,8 @@
 #include <sys/time.h>
 #include <pthread.h>
 
-//#define EX1
-#define EX10
+#define EX1
+//#define EX10
 // #define EX46
 
 using namespace std;
@@ -18,7 +18,7 @@ enum UP_OPTYPE { _EXIT, _INC, _DEC, _SUBST, _SYSTEM_FAILURE };
 const uint32_t Delta = 500; // Delta(ms)でロックが獲得できない場合はrollbackする。
 
 extern TransTable trans_table;
-extern PageBufferEntry pageBuffers[PAGE_N];
+extern PageBufferEntry page_table[PAGE_N];
 extern map<uint32_t, uint32_t> DPT;
 
 extern void remove_transaction_xid(uint32_t xid);
@@ -40,7 +40,7 @@ operator>>( std::istream& is, UP_OPTYPE& i )
   return is ;
 }
 
-static void
+void
 operation_select(OP *op){
     int tmp = rand() % 3 + 1;
     switch(tmp){
@@ -52,7 +52,7 @@ operation_select(OP *op){
     op->amount = rand() % 100 + 1;
 }
 
-static void
+void
 page_select(uint32_t *page_id){
   *page_id = rand() % PAGE_N;
 }
@@ -60,13 +60,12 @@ page_select(uint32_t *page_id){
 static void
 lock_release(set<uint32_t> &lock_table){
   for(set<uint32_t>::iterator it = lock_table.begin(); it!=lock_table.end(); it++){
-    pthread_rwlock_unlock(&pageBuffers[*it].lock);
+    pthread_rwlock_unlock(&page_table[*it].lock);
   }
 }
 
-
-static int
-process_transaction(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num){
+int
+update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int th_id){
   set<uint32_t> my_lock_table;
   OP op;
   uint32_t pageID;
@@ -79,20 +78,26 @@ process_transaction(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num){
     op = ops[i];
     pageID = page_ids[i];
 
-    PageBufferEntry *pbuf = &(pageBuffers[pageID]);
-    if(my_lock_table.find(pageID) == my_lock_table.end()){ // 自スレッドが該当ページのロックをまだ獲得していない状態
-      //      pthread_rwlock_init(&pbuf->lock, NULL);
+    PageBufferEntry *pbuf = &(page_table[pageID]);
 
-      //      pthread_rwlock_wrlock(&pbuf->lock); //write lock
+    /* 
+       自スレッドが該当ページのロックを取得していないなら、グローバルロックテーブルにロックをかけて、
+       他に該当ページを更新するスレッドが先にいないかをチェックする。
+     */
+    if(my_lock_table.find(pageID) == my_lock_table.end()){ 
+      /* 自スレッドが該当ページのロックをまだ獲得していない状態 */
       
       // 開始時間の計測
       struct timeval s,t;
       gettimeofday(&s,NULL);
       while(1){
-	if(pthread_rwlock_trywrlock(&pbuf->lock) == 0) break; //write lock
-	// 開始時からの経過時間の計測（δ以上経過してたら)、打ち切ってロールバックする
-	gettimeofday(&t,NULL);
-	// deadlock detection
+	if(pthread_rwlock_trywrlock(&pbuf->lock) == 0) break; // 書き込みロックの獲得に成功したらbreakする。
+	/*
+	  開始時からの経過時間の計測.
+	  δ以上経過してたら、打ち切ってロールバックする.
+	*/
+	gettimeofday(&t,NULL);	
+	/* May be, deadlock occur. */
 	if( ((t.tv_sec - s.tv_sec)*1000 + (t.tv_usec - s.tv_usec)/1000 ) > Delta ){
 	  cout << "-" ;
 	  rollback(xid);
@@ -124,50 +129,9 @@ process_transaction(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num){
 
   return 0;
 }
+void WAL_update(OP op, uint32_t xid, int pageID, int th_id){
 
-
-/* 
-   Tranasction id を渡して、Transactionを行う。
-   この関数は、unfixed_thread_mode, fixed_thread_modeから共に呼び出される。
-   実際にTransaction処理を行っているのは、process_transaction()。
-   命令を構成したり、ロールバックした場合トランザクションを再実行するための
-   ラッパ関数のようなもの。
- */
-void *
-th_transaction(void *_xid)  // _xid is uint32_t* type.
-{
-  uint32_t xid = *((uint32_t *)_xid);
-  free(_xid); // メモリリークに気をつける
-
-  /* 命令群を構成する */
-  OP ops[MAX_UPDATE];
-  uint32_t page_ids[MAX_UPDATE];
-  int update_num = rand() % MAX_UPDATE + 1; // UPDATE 回数
-
-#ifdef EX1
-  update_num = 1;
-#elsif EX10
-  update_num = 10;
-#elsif EX46
-  update_num = 46;
-#endif
-
-  for(int i=0;i<update_num;i++){
-    operation_select(&ops[i]);
-    page_select(&page_ids[i]);
-  }
-  
-  //  cout << "th_transaction: " << xid << endl;
-  // transactionがrollbackしたら何度でも繰り返す
-  while(process_transaction(xid, ops, page_ids, update_num) == -1);
-
-  return NULL;
-}
-
-
-void WAL_update(OP op, uint32_t xid, int pageID){
-
-  PageBufferEntry *pbuf = &pageBuffers[pageID];
+  PageBufferEntry *pbuf = &page_table[pageID];
   // fixed flagがなければファイルから読み込んでfixする
 
 #ifdef DEBUG
@@ -310,8 +274,8 @@ rollback(uint32_t xid){
     if (log.Type == UPDATE){
       int idx=log.PageID;
       
-      pageBuffers[idx].page.value = log.before;
-      //   pageBuffers[idx].page.page_LSN = log.LSN; 
+      page_table[idx].page.value = log.before;
+      //   page_table[idx].page.page_LSN = log.LSN; 
 
       Log clog;
       memset(&clog,0,sizeof(Log));
@@ -358,3 +322,23 @@ rollback(uint32_t xid){
   close(log_fd);
 }
 
+
+void 
+flush_page(){
+  int fd;
+  if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat", O_CREAT | O_WRONLY )) == -1){
+    perror("open");
+    exit(1);
+  }
+  
+  for(int i=0;i<PAGE_N;i++){
+    if(!page_table[i].fixed_flag)
+      continue;
+
+    lseek(fd,sizeof(Page)*page_table[i].page_id, SEEK_SET);
+    if( -1 == write(fd, &page_table[i].page, sizeof(Page))){
+      perror("write"); exit(1);
+    }
+  }    
+  close(fd);
+}

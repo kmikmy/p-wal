@@ -4,36 +4,20 @@
 #include <pthread.h>
 #include <map>
 
-#define MAX_QUEUE_SIZE 32
-
-/* processing thread の 最大数 */
-#define MAX_PQUEUE_THREAD 32
 //#define DEBUG 1
 
 using namespace std;
 enum T_Mode { COMMIT_M, UPDATE_M, ROLLBACK_M, FLUSH_M, SHOWDP_M };
 
-/*
- When only fixed_thread_mode, trans_queue is used and 
- then these transactions in trans_queue will be moved
- to trans_table by processing transaction thread.
-*/
-
 TransTable trans_table;
-TransQueue trans_queue; 
 
-/* 
-   thread_flagがtrueならまだタスクが生成される可能性がある。
-   process_queue_threadはthread_flagとTransQueueの中身を見てexitするか判定する。
-   manage_quqeue_threadはトランザクションの生成が全て終わると、このフラグを外す。
-*/
-static bool thread_flag; 
-
-
-extern PageBufferEntry pageBuffers[PAGE_N];
 extern map<uint32_t, uint32_t> DPT;
 
-extern void* th_transaction(void *_xid);
+extern void start_transaction(uint32_t xid, int th_id);
+extern void operation_select(OP *op);
+extern void page_select(uint32_t *page_id);
+extern int update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int th_id);
+
 static void flush_page();
 
 std::istream& 
@@ -46,26 +30,6 @@ operator>>( std::istream& is, T_Mode& i )
 }
 
 static void 
-create_tr_thread(uint32_t xid){
-    pthread_t th;
-    pthread_attr_t th_attr;
-    pthread_attr_init(&th_attr);
-    pthread_attr_setdetachstate(&th_attr , PTHREAD_CREATE_DETACHED);
-
-    uint32_t *th_data = (uint32_t *)malloc(sizeof(uint32_t)); 
-    // 動的に生成したデータでないと、create_tr_thread()のscopeを抜けたときに
-    // xidのメモリも開放されてしまってトランザクションスレッドで正しくxidを
-    // 読み込めないため。トランザクションスレッド側でfreeする。
-    *th_data = xid;
-
-    if( pthread_create(&th, &th_attr, th_transaction, (void *)th_data) != 0 ){
-      perror("pthread_create()");
-    }
-
-    pthread_attr_destroy(&th_attr);
-}
-
-static void 
 show_dp(){
   cout << endl << " *** show Dirty Page ***" << endl;
   map<uint32_t, uint32_t>::iterator it;
@@ -75,6 +39,18 @@ show_dp(){
   cout << "***********************" << endl;
 }
 
+uint32_t 
+construct_transaction(Transaction *trans){
+    trans->TransID = ARIES_SYSTEM::xid_inc();
+    trans->State = U;
+    trans->LastLSN = 0;
+    trans->UndoNxtLSN = 0;
+
+    return trans->TransID;
+}
+
+
+/* trans_tableを変更する際にはロックが必要 */
 static std::mutex trans_table_mutex;
 
 void 
@@ -89,157 +65,49 @@ remove_transaction_xid(uint32_t xid){
   trans_table.erase(trans_table.find(xid));
 }
 
+/*
+  逐次でトランザクションを num 件実行する。
+*/
 void 
 start_transaction(int num){
   for(int i=0;i<num;i++){
     Transaction trans;
-    trans.TransID = ARIES_SYSTEM::xid_inc();
-    trans.State = U;
-    trans.LastLSN = 0;
-    trans.UndoNxtLSN = 0;
+    construct_transaction(&trans);
+
     append_transaction(trans);
-    create_tr_thread(trans.TransID);
+    start_transaction(trans.TransID, 0);
   }
 }
 
-uint32_t 
-construct_transaction(Transaction *trans){
-    trans->TransID = ARIES_SYSTEM::xid_inc();
-    trans->State = U;
-    trans->LastLSN = 0;
-    trans->UndoNxtLSN = 0;
+/* 
+   Tranasction idとスレッド id を渡して、Transactionの実行を開始する。
+   
+   この関数ではまずトランザクションの内容を構築し、
+   process_transaction()を呼び出す事で、トランザクションを処理する。
+*/
+void
+start_transaction(uint32_t xid, int th_id) 
+{
+  /* 命令群を構成する */
+  OP ops[MAX_UPDATE];
+  uint32_t page_ids[MAX_UPDATE];
+  int update_num = rand() % MAX_UPDATE + 1; // UPDATE 回数
 
-    return trans->TransID;
-}
+#ifdef EX1
+  update_num = 1;
+#elif EX10
+  update_num = 10;
+#elif EX46
+  update_num = 46;
+#endif
 
-void 
-flush_page(){
-  int fd;
-  if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat", O_CREAT | O_WRONLY )) == -1){
-    perror("open");
-    exit(1);
+  for(int i=0;i<update_num;i++){
+    operation_select(&ops[i]);
+    page_select(&page_ids[i]);
   }
   
-  for(int i=0;i<PAGE_N;i++){
-    if(!pageBuffers[i].fixed_flag)
-      continue;
-
-    lseek(fd,sizeof(Page)*pageBuffers[i].page_id, SEEK_SET);
-    if( -1 == write(fd, &pageBuffers[i].page, sizeof(Page))){
-      perror("write"); exit(1);
-    }
-  }    
-
-  close(fd);
+  //  cout << "th_transaction: " << xid << endl;
+  // transactionがrollbackしたら何度でも繰り返す
+  while(update_operations(xid, ops, page_ids, update_num, th_id) == -1);
 }
 
-static
-void *
-manage_queue_thread(void *_ntrans){
-  int ntrans = *((int *)_ntrans);
-  int cnt = ntrans;
-  free(_ntrans);
-
-  while(cnt > 0){
-    trans_queue.lock(); // critical section start
-
-    if(trans_queue.full()){
-      //      cout << "full" << endl;
-      trans_queue.unlock();
-      //      usleep(1000);
-      continue;
-    }
-
-    while(!trans_queue.full() && cnt > 0){
-      Transaction trans;
-      // transaction の構築
-      construct_transaction(&trans);
-
-      trans_queue.push(trans);
-      cnt--;
-#ifdef DEBUG
-      cout << pthread_self() << ") cnt: " << cnt << endl;
-#endif
-    }
-
-    trans_queue.unlock(); // critical section end
-  }
-
-  thread_flag = false; // process_queue_threadに終了を通知する 
-  return NULL;
-}
-
-static
-void *
-process_queue_thread(void *null){
-  Transaction trans;
-
-  /* queueにタスクがある or これからまだタスクが追加される　間はループ */
-  while(!trans_queue.empty() || thread_flag){
-
-    /* この間にqueueが空になる可能性がある */
-
-    trans_queue.lock();    /* critical section start*/
-    if(trans_queue.empty()){ // emptyなら少し待って再度上のwhileへ
-      trans_queue.unlock(); /* critical section end */ 
-      //      usleep(10);
-      continue;
-    }
-    trans = trans_queue.front();
-    trans_queue.pop();
-    trans_queue.unlock(); /* critical section end */ 
-    
-    append_transaction(trans);
-
-    // transactionの開始
-    uint32_t *_xid = (uint32_t *)malloc(sizeof(uint32_t));
-    *_xid = trans.TransID;
-    
-    th_transaction(_xid);
-  }
-  return NULL;
-}
-
-
-
-pthread_t
-gen_queue_thread(int _ntrans){
-    pthread_t th;
-
-    trans_queue.setsize(MAX_QUEUE_SIZE);
-    trans_queue.init();
-    thread_flag = true;
-
-    int *ntrans = (int *)malloc(sizeof(int)); 
-    *ntrans = _ntrans;
-    
-    // 動的に生成したデータでないと、create_tr_thread()のscopeを抜けたときに
-    // xidのメモリも開放されてしまってトランザクションスレッドで正しくxidを
-    // 読み込めないため。トランザクションスレッド側でfreeする。
-
-    if( pthread_create(&th, NULL, manage_queue_thread, (void *)ntrans) != 0 ){
-      perror("pthread_create()");
-      exit(1);
-    }
-
-    return th;
-}
-
-
-void
-gen_pqueue_thread(int nthread){
-    pthread_t th[MAX_PQUEUE_THREAD];
-    
-    for(int i=0; i<nthread; i++){
-      if( pthread_create(&th[i], NULL, process_queue_thread, NULL) != 0 ){
-	perror("pthread_create()");
-	exit(1);
-      }
-    }
-    
-    for(int i=0;i<nthread; i++){
-      pthread_join(th[i], NULL);
-      //cout << "thread(" << i << ")" << endl;
-    }
-    
-}

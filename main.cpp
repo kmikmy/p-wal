@@ -3,20 +3,18 @@
 #include <iostream>
 #include <pthread.h>
 
-
 enum Mode { NORMAL_EXIT=0, T_START=1, FAILURE=2 };
 using namespace std;
 
-extern void start_transaction(int);
-extern pthread_t gen_queue_thread(int _ntrans);
-extern void gen_pqueue_thread(int _nthread);
+extern void batch_start_transaction(int);
+extern pthread_t gen_producer_thread(int _ntrans);
+extern void gen_worker_thread(int _nthread);
 
 extern MasterRecord master_record;
 extern TransTable trans_table;
 extern TransQueue trans_queue;
 extern PageBufferEntry pageBuffers[PAGE_N];
 
-static void unfixed_thread_mode(int n);
 static void fixed_thread_mode(int n, int nthread);
 static void interact_mode();
 
@@ -36,10 +34,16 @@ int main(int argc, char *argv[]){
   }
   else if(argc == 2){
     cout << "usage: ./aries num_trans num_threads" << endl;
-    // 生成したスレッドの待ち合わせが難しい。ので廃止
-    //unfixed_thread_mode(atoi(argv[1]));
   }
   else if(argc == 3){
+    int th_num = atoi(argv[2]);
+    int cpunum = sysconf(_SC_NPROCESSORS_ONLN);
+
+    if(th_num > NUM_MAX_CORE-1 || th_num > cpunum-1){
+      cout << "Usage: ./a.out xact_num th_num(<=" << (NUM_MAX_CORE<cpunum?NUM_MAX_CORE-1:cpunum-1) << ")" << endl;
+      return 0;
+    }
+
     fixed_thread_mode(atoi(argv[1]), atoi(argv[2]));
   }
 
@@ -48,25 +52,17 @@ int main(int argc, char *argv[]){
 
 
 /*
-  必要がないので廃止中。
-*/
-static void 
-unfixed_thread_mode(int n){
-  ARIES_SYSTEM::db_init();
-  start_transaction(n);
-  ARIES_SYSTEM::normal_exit();
-}
-
+  
+ */
 static void 
 fixed_thread_mode(int n,int nthread){
   ARIES_SYSTEM::db_init();
-
   /*
-    gen_queue_thread()とgen_pqueue_thread()の呼び出し順は固定。
-    gen_pqueue_thread()の中でpthread_join()が呼び出されているため。
- */
-  pthread_t th = gen_queue_thread(n);
-  gen_pqueue_thread(nthread);
+    gen_producer_thread()とgen_worker_thread()の呼び出し順は固定。
+    gen_worker_thread()の中でworkerスレッドに対するpthread_join()が呼び出されているため。
+  */
+  pthread_t th = gen_producer_thread(n);
+  gen_worker_thread(nthread);
   
   pthread_join(th, NULL);
 
@@ -91,7 +87,7 @@ void interact_mode(){
     cin >> m;
     
     switch (m){
-    case T_START: start_transaction(1); break;
+    case T_START: batch_start_transaction(1); break;
     case NORMAL_EXIT: ARIES_SYSTEM::normal_exit(); exit(0);
     case FAILURE: ARIES_SYSTEM::abnormal_exit(); exit(0);
     default: cout << "The mode isn't exist: " << m << endl; 
