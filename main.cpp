@@ -3,6 +3,8 @@
 #include <iostream>
 #include <pthread.h>
 
+#define NUM_MAX_CORE 16
+
 enum Mode { NORMAL_EXIT=0, T_START=1, FAILURE=2 };
 using namespace std;
 
@@ -17,7 +19,6 @@ extern PageBufferEntry pageBuffers[PAGE_N];
 
 static void fixed_thread_mode(int n, int nthread);
 static void interact_mode();
-
 
 std::istream& operator>>( std::istream& is, Mode& i )
 {
@@ -43,17 +44,12 @@ int main(int argc, char *argv[]){
       cout << "Usage: ./a.out xact_num th_num(<=" << (NUM_MAX_CORE<cpunum?NUM_MAX_CORE-1:cpunum-1) << ")" << endl;
       return 0;
     }
-
     fixed_thread_mode(atoi(argv[1]), atoi(argv[2]));
   }
 
   return 0;
 }
 
-
-/*
-  
- */
 static void 
 fixed_thread_mode(int n,int nthread){
   ARIES_SYSTEM::db_init();

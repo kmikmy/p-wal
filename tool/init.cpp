@@ -4,10 +4,13 @@
 
 using namespace std;
 
+#define LOG_OFFSET (1073741824)
 #ifndef FIO
-static const char *log_path = "/work/kamiya/log.dat";
+#define NUM_MAX_LOGFILE 1
+static const char* log_path = "/work/kamiya/log.dat";
 #else
-static const char *log_path = "/dev/fioa";
+#define NUM_MAX_LOGFILE 7
+static const char* log_path = "/dev/fioa";
 #endif
 
 void init();
@@ -34,7 +37,7 @@ void init(){
   }
 
   cout << "[before init]" << endl;
-  cout << "chkp:" <<  master_record.mr_chkp << ", xid:" << master_record.system_xid << ", last_exit:" << master_record.last_exit << endl;
+  cout << "chkp:" <<  master_record.mr_chkp << ", xid:" << master_record.system_xid << ", last_exit:" << std::boolalpha << master_record.last_exit << endl;
 
   master_record.mr_chkp=0;
   master_record.system_xid=0;
@@ -64,12 +67,22 @@ void init(){
   }
 #endif
 
-  LogHeader lh = {0};
-  if(-1 == write(fd, &lh, sizeof(lh))){
-    perror("write");
-    exit(1);
-  }
+  for(int i=0;i<NUM_MAX_LOGFILE;i++){
 
+    off_t base = i * LOG_OFFSET;
+
+#ifdef FIO
+    printf("###   LogFile #%d is cleared   ###\n",i);
+#endif
+
+    lseek(fd, base, SEEK_SET);
+
+    LogHeader lh = {0};
+    if(-1 == write(fd, &lh, sizeof(lh))){
+      perror("write");
+      exit(1);
+    }
+  }
  
   close(fd);
 }

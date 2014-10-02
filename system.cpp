@@ -236,6 +236,7 @@ page_table_debug(){
 }
 
 
+/* (undoの後に呼び出される処理だが、実際は単純に)ページを書き出す処理 */
 static void 
 page_undo_write(unsigned n){
   int fd;
@@ -246,7 +247,7 @@ page_undo_write(unsigned n){
   
   lseek(fd,0,SEEK_SET);
 
-  for(int i=0;i<n;i++){
+  for(unsigned i=0;i<n;i++){
     if( -1 == write(fd, &pages[i], sizeof(Page))){
       perror("write"); exit(1);
     }    
@@ -301,13 +302,14 @@ int ARIES_SYSTEM::abnormal_exit(){
 }
 
 
-int ARIES_SYSTEM::normal_exit()
+int
+ARIES_SYSTEM::normal_exit()
 {
 
   // この関数に入る前に他スレッドが終了していること
   
   std::lock_guard<std::mutex> lock(mr_mtx);
-  Logger::log_flush();
+  Logger::log_all_flush();
 
   master_record.last_exit=true;
 

@@ -8,12 +8,15 @@
 
 using namespace std;
 
-
+#define LOG_OFFSET (1073741824)
 #ifndef FIO
+#define NUM_MAX_LOGFILE 1
 static const char* log_path = "/work/kamiya/log.dat";
 #else
+#define NUM_MAX_LOGFILE 7
 static const char* log_path = "/dev/fioa";
 #endif
+
 
 std::ostream& operator<<( std::ostream& os, OP_TYPE& opt){
   switch(opt){
@@ -49,29 +52,37 @@ int main(){
     exit(1);
   }
 
-  lseek(fd, 0, SEEK_SET);
-  LogHeader lh;
-  if(read(fd, &lh, sizeof(LogHeader)) == -1){
+  for(int i=0;i<NUM_MAX_LOGFILE;i++){
+
+#ifdef FIO
+    printf("###   LogFile(%d)   ###\n",i);
+#endif
+
+    off_t base=i*LOG_OFFSET;
+
+    lseek(fd, base, SEEK_SET);
+    LogHeader lh;
+    if(read(fd, &lh, sizeof(LogHeader)) == -1){
       perror("read"); exit(1);
+    }
+    cout << "the number of logs is " << lh.count << "." << endl;  
+    
+    for(unsigned i=0;i<lh.count;i++){
+      Log log;
+      int len;
+      if((len = read(fd, &log, sizeof(Log))) == -1){
+	perror("read"); exit(1);
+      }    
+      if(len == 0) break;
+      
+      cout << "Log[" << log.LSN << "]: TransID=" << log.TransID << ", Type=" << log.Type;
+      
+      if(log.Type != BEGIN && log.Type != END)
+	cout << ", PrevLSN=" << log.PrevLSN << ", UndoNxtLSN=" << log.UndoNxtLSN << ", PageID=" << log.PageID << ", before=" << log.before << ", after=" << log.after << ", op.op_type=" << log.op.op_type << ", op.amount=" << log.op.amount;
+      
+      
+      cout << endl;
+    }
   }
-  cout << "the number of logs is " << lh.count << "." << endl;  
-
-  for(unsigned i=0;i<lh.count;i++){
-    Log log;
-    int len;
-    if((len = read(fd, &log, sizeof(Log))) == -1){
-      perror("read"); exit(1);
-    }    
-    if(len == 0) break;
-
-    cout << "Log[" << log.LSN << "]: TransID=" << log.TransID << ", Type=" << log.Type;
-
-    if(log.Type != BEGIN && log.Type != END)
-      cout << ", PrevLSN=" << log.PrevLSN << ", UndoNxtLSN=" << log.UndoNxtLSN << ", PageID=" << log.PageID << ", before=" << log.before << ", after=" << log.after << ", op.op_type=" << log.op.op_type << ", op.amount=" << log.op.amount;
-
-
-    cout << endl;
-  }
-  
   return 0;
 }

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <pthread.h>
+#include <sched.h>
 #include <map>
 
 //#define DEBUG 1
@@ -17,7 +18,6 @@ extern void start_transaction(uint32_t xid, int th_id);
 extern void operation_select(OP *op);
 extern void page_select(uint32_t *page_id);
 extern int update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int th_id);
-
 static void flush_page();
 
 std::istream& 
@@ -69,7 +69,7 @@ remove_transaction_xid(uint32_t xid){
   逐次でトランザクションを num 件実行する。
 */
 void 
-start_transaction(int num){
+batch_start_transaction(int num){
   for(int i=0;i<num;i++){
     Transaction trans;
     construct_transaction(&trans);
@@ -110,4 +110,3 @@ start_transaction(uint32_t xid, int th_id)
   // transactionがrollbackしたら何度でも繰り返す
   while(update_operations(xid, ops, page_ids, update_num, th_id) == -1);
 }
-
