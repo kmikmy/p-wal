@@ -7,10 +7,6 @@
 #include <sys/time.h>
 #include <pthread.h>
 
-#define EX1
-//#define EX10
-// #define EX46
-
 using namespace std;
 
 enum UP_OPTYPE { _EXIT, _INC, _DEC, _SUBST, _SYSTEM_FAILURE };
