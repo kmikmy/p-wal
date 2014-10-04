@@ -7,7 +7,7 @@ enum Mode { NORMAL_EXIT=0, T_START=1, FAILURE=2 };
 using namespace std;
 
 extern void batch_start_transaction(int);
-extern pthread_t gen_producer_thread(int _ntrans);
+extern pthread_t gen_producer_thread(int _ntrans, int _nqueue);
 extern void gen_worker_thread(int _nthread);
 
 extern MasterRecord master_record;
@@ -54,7 +54,7 @@ fixed_thread_mode(int n,int nthread){
     gen_producer_thread()とgen_worker_thread()の呼び出し順は固定。
     gen_worker_thread()の中でworkerスレッドに対するpthread_join()が呼び出されているため。
   */
-  pthread_t th = gen_producer_thread(n);
+  pthread_t th = gen_producer_thread(n, nthread);
   gen_worker_thread(nthread);
   
   pthread_join(th, NULL);

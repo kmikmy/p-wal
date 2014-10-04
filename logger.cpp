@@ -211,5 +211,3 @@ Logger::log_debug(Log log){
 
 
 
-  
-

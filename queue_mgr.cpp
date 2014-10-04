@@ -5,10 +5,16 @@
 
 using namespace std;
 
-/* QUEUEの長さ */
-#define MAX_QUEUE_SIZE 1000000
+/* 
+   QUEUEの長さ 
+   一つのキュー当たり最大で 1千万 * 120バイト = 1.2GB のログが書かれる. 
+   QUEUEがemptyの状態とfullの状態を区別するために、fullの状態は１つ分だけ要素が空いているようにするので、
+   キューに入る最大要素+1が実際のキューのサイズとする.
+*/
+//#define MAX_QUEUE_SIZE 10000000 + 1 
+#define MAX_QUEUE_SIZE 100 + 1 
 /* processing thread の 最大数 */
-#define MAX_WORKER_THREAD 15
+#define MAX_WORKER_THREAD 7
 
 
 /* 
@@ -17,27 +23,22 @@ using namespace std;
    vectorでqueueを実装.
    std::queue.front()は参照を返すので、popで削除すると問題があるため.
 */
-typedef class {
- private:
-  unsigned max_size;
+
+
+class TransQueue{
+private:
   pthread_mutex_t mutex;
-  std::vector<Transaction> real_vector;
-
- public:
-  int setsize(unsigned n)
-  {
-    if(n > MAX_QUEUE_SIZE){
-      cout << "QUEUE_SIZE is too big" << endl;
-      exit(1);
-    }
-
-    max_size = n;
-    return 0;
+  // std::vector<Transaction> real_vector;
+  Transaction real_queue[MAX_QUEUE_SIZE]; // fullとemptyを区別するために1要素余分に保持する
+  int head, next; //先頭と最後の番号を指す
+  
+public:
+  TransQueue(){
+    init();
   }
-
   void init()
   {
-    pthread_mutex_init(&mutex,NULL);
+    head = next = 0;
   }
   void lock()
   {
@@ -49,28 +50,41 @@ typedef class {
   }
 
   bool empty(){
-    return real_vector.empty();
+    return head == next;
   }
   size_t size(){
-    return real_vector.size();
+    return (head<=next) ? next-head :(MAX_QUEUE_SIZE-head)+next;
   }
+
+  /* emptyの状態と区別するために、一要素分開けた状態をfullの定義とする */
   bool full(){
-    return size() >= max_size;
+    return size() == MAX_QUEUE_SIZE-1;
   }
   Transaction front(){
-    return real_vector.front();
+    return real_queue[head];
   }
   void pop(){
-    real_vector.erase(real_vector.begin());
+    head++;
+    if(head==MAX_QUEUE_SIZE)
+      head = 0;
   }
-  void push(const Transaction &trans){
-    if(size() >= max_size)
-      return;
+  void push(Transaction trans){
+    if(full()){
+      cout << "trans_queue is full." << endl;
+      exit(1);
+    }
 
-    real_vector.push_back(trans);
+    real_queue[next++]=trans;
+    if(next==MAX_QUEUE_SIZE)
+      next = 0;
   }
 
-} TransQueue;
+};
+
+typedef struct _ProArg{
+  int ntrans; 
+  int nqueue;
+} ProArg;
 
 
 extern uint32_t construct_transaction(Transaction *trans);
@@ -86,6 +100,16 @@ TransQueue trans_queues[MAX_WORKER_THREAD];
    manage_quqeue_threadはトランザクションの生成が全て終わると、このフラグを外す。
 */
 static bool rest_flag; 
+
+
+/* 
+   trans_queuesにトランザクションをまとめて詰め込む。
+ */
+static 
+void *
+trans_queues_init(uint32_t ntrans){
+  return NULL;
+}
 
 static
 void *
@@ -177,21 +201,21 @@ process_queue_thread(void *_th_id){
 
 
 pthread_t
-gen_producer_thread(int _ntrans){
+gen_producer_thread(int _ntrans, int _nqueue){
     pthread_t th;
 
-    trans_queue.setsize(MAX_QUEUE_SIZE);
     trans_queue.init();
     rest_flag = true;
 
-    int *ntrans = (int *)malloc(sizeof(int)); 
-    *ntrans = _ntrans;
+    ProArg *args = (ProArg *)malloc(sizeof(ProArg)); 
+    args->ntrans = _ntrans;
+    args->nqueue = _nqueue;
     
     // 動的に生成したデータでないと、create_tr_thread()のscopeを抜けたときに
     // xidのメモリも開放されてしまってトランザクションスレッドで正しくxidを
     // 読み込めないため。トランザクションスレッド側でfreeする。
 
-    if( pthread_create(&th, NULL, manage_queue_thread, (void *)ntrans) != 0 ){
+    if( pthread_create(&th, NULL, manage_queue_thread, (void *)args) != 0 ){
       perror("pthread_create()");
       exit(1);
     }
