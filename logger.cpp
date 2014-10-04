@@ -16,8 +16,6 @@ const char* Logger::logpath = "/work/kamiya/log.dat";
 const char* Logger::logpath = "/dev/fioa";
 #endif
 
-static int log_fd;
-
 /* 
    LogBuffer:
    
@@ -28,13 +26,13 @@ class LogBuffer{
  private:
   static const unsigned MAX_LOG_SIZE=128;
   unsigned idx;
-  unsigned th_id;
-
+  int log_fd;
 
  public:
   Log logs[MAX_LOG_SIZE];
   std::mutex log_mtx;
   unsigned num_commit;
+  int th_id;
 
   LogBuffer(){
     clear();
@@ -59,17 +57,18 @@ class LogBuffer{
     logHeaderはbaseアドレスに位置し、Logがその後に続く
    */
   void 
-  flush(uint64_t base)
+  flush()
   {
     LogHeader lh;
+    off_t base = (off_t)this->th_id * LOG_OFFSET;
     
     lseek(log_fd, base, SEEK_SET);
     int ret = read(log_fd, &lh, sizeof(LogHeader));
     if(-1 == ret){
       perror("read"); exit(1);
-    } 
-
-    unsigned save_count = lh.count;
+    }
+ 
+    uint64_t save_count = lh.count;
     lh.count += size();
 
     lseek(log_fd, base, SEEK_SET);
@@ -77,14 +76,16 @@ class LogBuffer{
       perror("write"); exit(1);
     }
 
-    off_t pos = base + sizeof(LogHeader) + save_count * sizeof(Log);
+
+    off_t pos = base + sizeof(LogHeader) + (save_count * sizeof(Log));
+
     lseek(log_fd, pos, SEEK_SET);
     // lseek(log_fd, 0, SEEK_END);
     // fusionではSEEK_ENDできない
 
     write(log_fd, logs, sizeof(Log)*size());  
 
-    //  std::cout << "flush" << std::endl;
+    // std::cout << "LogBuffer[" << th_id << "] flush " << size() << " logs from " << pos << "." << std::endl;
     
     clear();
   }
@@ -159,6 +160,14 @@ std::ostream& operator<<( std::ostream& os, LOG_TYPE& type){
   return os;
 }
 
+
+/* 各logBufferにth_idを指定する*/
+void
+Logger::init(){
+  for(int i=0;i<MAX_CORE_NUM;i++)
+    logBuffer[i].th_id = i;
+}
+
 int 
 Logger::log_write(Log *log, int th_id){
 #ifndef FIO
@@ -170,7 +179,7 @@ Logger::log_write(Log *log, int th_id){
   logBuffer[th_id].push(*log);
 
   if( (log->Type == END && logBuffer[th_id].num_commit == NUM_GROUP_COMMIT ) || logBuffer[th_id].full() ){
-    logBuffer[th_id].flush(th_id * LOG_OFFSET);
+    logBuffer[th_id].flush();
   }
 
   return 0;
@@ -180,7 +189,7 @@ void
 Logger::log_all_flush(){
   for(int i=0;i<NUM_MAX_CORE;i++)
     if(!logBuffer[i].empty())
-      logBuffer[i].flush(i * LOG_OFFSET);
+      logBuffer[i].flush();
 }
 
 void 

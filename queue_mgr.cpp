@@ -203,6 +203,8 @@ gen_producer_thread(int _ntrans){
 void
 gen_worker_thread(int nthread){
     pthread_t th[MAX_WORKER_THREAD];
+
+    Logger::init();
     
     for(int i=0; i<nthread; i++){
       int *_th_id = (int *)malloc(sizeof(int));

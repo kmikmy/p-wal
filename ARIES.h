@@ -122,6 +122,7 @@ class Logger
   static void log_flush();
   static void log_all_flush();
   static void log_debug(Log log);
+  static void init();
 };
 
 #endif //  _ARIES

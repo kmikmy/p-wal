@@ -58,7 +58,7 @@ int main(){
     printf("###   LogFile(%d)   ###\n",i);
 #endif
 
-    off_t base=i*LOG_OFFSET;
+    off_t base=(off_t)i*LOG_OFFSET;
 
     lseek(fd, base, SEEK_SET);
     LogHeader lh;
