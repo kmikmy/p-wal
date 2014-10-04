@@ -83,7 +83,7 @@ typedef struct {
 
 
 typedef struct{
-  uint32_t count;
+  uint64_t count;
 } LogHeader;
 
 typedef struct {

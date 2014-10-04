@@ -236,11 +236,6 @@ rollback(uint32_t xid){
     perror("open"); exit(1);
   }
 
-  LogHeader lh;  
-  if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
-    perror("read"); exit(1);
-  }
-
   uint32_t lsn = trans_table[xid].LastLSN; // rollbackするトランザクションの最後のLSN
 
   Log log;

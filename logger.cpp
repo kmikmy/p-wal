@@ -1,6 +1,10 @@
 #include "ARIES.h"
 #include <iostream>
 
+using namespace std;
+
+// #define DEBUG
+
 #define NUM_GROUP_COMMIT 10
 #define NUM_MAX_CORE 7
  // 1GB
@@ -8,14 +12,11 @@
 
 #ifndef FIO
 const char* Logger::logpath = "/work/kamiya/log.dat";
-// 複数のログバッファを利用してディスクにフラッシュするシーケンシャルログ方式は単一のロックオブジェクトが必要
-std::mutex global_log_mtx; 
 #else
 const char* Logger::logpath = "/dev/fioa";
 #endif
 
 static int log_fd;
-
 
 /* 
    LogBuffer:
@@ -27,6 +28,7 @@ class LogBuffer{
  private:
   static const unsigned MAX_LOG_SIZE=128;
   unsigned idx;
+  unsigned th_id;
 
 
  public:
@@ -59,20 +61,17 @@ class LogBuffer{
   void 
   flush(uint64_t base)
   {
-#ifndef FIO // シーケンシャルログ方式の場合全てのログバッファが同じ箇所に書き込むことになるため、ロックが必要になる
-    base = 0;
-    std::lock_guard<std::mutex> lock(global_log_mtx);  
-#endif
-
     LogHeader lh;
     
     lseek(log_fd, base, SEEK_SET);
-    if(-1 == read(log_fd, &lh, sizeof(LogHeader))){
+    int ret = read(log_fd, &lh, sizeof(LogHeader));
+    if(-1 == ret){
       perror("read"); exit(1);
-    };
+    } 
+
     unsigned save_count = lh.count;
     lh.count += size();
-  
+
     lseek(log_fd, base, SEEK_SET);
     if(-1 == write(log_fd, &lh, sizeof(LogHeader))){;
       perror("write"); exit(1);
@@ -89,7 +88,6 @@ class LogBuffer{
     
     clear();
   }
-  
 
   size_t size(){
     return idx;
@@ -119,15 +117,16 @@ class LogBuffer{
     off_t pos;
     LogHeader lh;
     
-    lseek(log_fd, 0, SEEK_SET);
-    if(-1 == read(log_fd, &lh, sizeof(LogHeader))){
+    lseek(log_fd, th_id*LOG_OFFSET, SEEK_SET);
+
+    int ret = read(log_fd, &lh, sizeof(LogHeader));
+    if(-1 == ret){
       perror("read");
       exit(1);
     }
     
     pos = sizeof(LogHeader) + (lh.count + size()) * sizeof(Log);
     return pos;
-    
   }
   
 };
@@ -161,10 +160,12 @@ std::ostream& operator<<( std::ostream& os, LOG_TYPE& type){
 }
 
 int 
-Logger::log_write(Log *log, int th_id=0){
+Logger::log_write(Log *log, int th_id){
+#ifndef FIO
+  th_id = 0;
+#endif
   std::lock_guard<std::mutex> lock(logBuffer[th_id].log_mtx);  
 
-  //  std::cout << logBuffer[th_id].next_lsn() << std::endl;
   log->LSN = logBuffer[th_id].next_lsn();
   logBuffer[th_id].push(*log);
 
