@@ -13,6 +13,7 @@
 
 #define PAGE_N (4096*16)
 #define MAX_UPDATE 100
+#define MAX_CORE_NUM 8
 
 enum LOG_TYPE { UPDATE, COMPENSATION, PREPARE, BEGIN, END, OSfile_return};
 enum OP_TYPE { NONE, INC,DEC,SUBST };
@@ -61,64 +62,6 @@ typedef struct {
 } Transaction;
 
 
-/* 
-   TransQueue:
-   
-   vectorでqueueを実装.
-   std::queue.front()は参照を返すので、popで削除すると問題があるため.
-*/
-typedef class {
- private:
-  unsigned max_size;
-  pthread_mutex_t mutex;
-  std::vector<Transaction> real_vector;
-
- public:
-  int setsize(unsigned n)
-  {
-    if(n > 256)
-      return -1;
-
-    max_size = n;
-    return 0;
-  }
-
-  void init()
-  {
-    pthread_mutex_init(&mutex,NULL);
-  }
-  void lock()
-  {
-    pthread_mutex_lock(&mutex);
-  }
-  void unlock()
-  {
-    pthread_mutex_unlock(&mutex);
-  }
-
-  bool empty(){
-    return real_vector.empty();
-  }
-  size_t size(){
-    return real_vector.size();
-  }
-  bool full(){
-    return size() >= max_size;
-  }
-  Transaction front(){
-    return real_vector.front();
-  }
-  void pop(){
-    real_vector.erase(real_vector.begin());
-  }
-  void push(const Transaction &trans){
-    if(size() >= max_size)
-      return;
-
-    real_vector.push_back(trans);
-  }
-
-} TransQueue;
 
 
 /*

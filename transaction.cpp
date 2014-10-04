@@ -4,21 +4,21 @@
 #include <pthread.h>
 #include <sched.h>
 #include <map>
+#include <set>
 
 #define EX1
 //#define EX10
 // #define EX46
 
-//#define DEBUG 1
+#define DEBUG 1
 
 using namespace std;
 enum T_Mode { COMMIT_M, UPDATE_M, ROLLBACK_M, FLUSH_M, SHOWDP_M };
 
 TransTable trans_table;
 
-extern map<uint32_t, uint32_t> DPT;
+extern map<uint32_t, uint32_t> dirty_page_table;
 
-extern void start_transaction(uint32_t xid, int th_id);
 extern void operation_select(OP *op);
 extern void page_select(uint32_t *page_id);
 extern int update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int th_id);
@@ -37,7 +37,7 @@ static void
 show_dp(){
   cout << endl << " *** show Dirty Page ***" << endl;
   map<uint32_t, uint32_t>::iterator it;
-  for(it=DPT.begin(); it!=DPT.end(); it++){
+  for(it=dirty_page_table.begin(); it!=dirty_page_table.end(); it++){
     cout << " * " << it->first << ": " << it->second << endl;
   }
   cout << "***********************" << endl;
@@ -67,20 +67,6 @@ void
 remove_transaction_xid(uint32_t xid){
   std::lock_guard<std::mutex> lock(trans_table_mutex);
   trans_table.erase(trans_table.find(xid));
-}
-
-/*
-  逐次でトランザクションを num 件実行する。
-*/
-void 
-batch_start_transaction(int num){
-  for(int i=0;i<num;i++){
-    Transaction trans;
-    construct_transaction(&trans);
-
-    append_transaction(trans);
-    start_transaction(trans.TransID, 0);
-  }
 }
 
 /* 
@@ -113,4 +99,32 @@ start_transaction(uint32_t xid, int th_id)
   //  cout << "th_transaction: " << xid << endl;
   // transactionがrollbackしたら何度でも繰り返す
   while(update_operations(xid, ops, page_ids, update_num, th_id) == -1);
+
+  remove_transaction_xid(xid);
 }
+
+static void
+show_transaction_table(){
+  map<uint32_t,Transaction>::iterator it;
+  
+  for(it=trans_table.begin(); it!=trans_table.end(); ++it){
+    std::cout << it->first << std::endl;
+  }
+}
+
+/*
+  逐次でトランザクションを num 件実行する。
+*/
+void 
+batch_start_transaction(int num){
+  for(int i=0;i<num;i++){
+    Transaction trans;
+    construct_transaction(&trans);
+
+    append_transaction(trans);
+    start_transaction(trans.TransID, 0);
+  }
+
+  show_transaction_table();
+}
+

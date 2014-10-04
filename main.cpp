@@ -3,8 +3,6 @@
 #include <iostream>
 #include <pthread.h>
 
-#define NUM_MAX_CORE 16
-
 enum Mode { NORMAL_EXIT=0, T_START=1, FAILURE=2 };
 using namespace std;
 
@@ -14,7 +12,6 @@ extern void gen_worker_thread(int _nthread);
 
 extern MasterRecord master_record;
 extern TransTable trans_table;
-extern TransQueue trans_queue;
 extern PageBufferEntry pageBuffers[PAGE_N];
 
 static void fixed_thread_mode(int n, int nthread);
@@ -40,8 +37,8 @@ int main(int argc, char *argv[]){
     int th_num = atoi(argv[2]);
     int cpunum = sysconf(_SC_NPROCESSORS_ONLN);
 
-    if(th_num > NUM_MAX_CORE-1 || th_num > cpunum-1){
-      cout << "Usage: ./a.out xact_num th_num(<=" << (NUM_MAX_CORE<cpunum?NUM_MAX_CORE-1:cpunum-1) << ")" << endl;
+    if(th_num > MAX_CORE_NUM-1 || th_num > cpunum-1){
+      cout << "Usage: ./a.out xact_num th_num(<=" << (MAX_CORE_NUM<cpunum?MAX_CORE_NUM-1:cpunum-1) << ")" << endl;
       return 0;
     }
     fixed_thread_mode(atoi(argv[1]), atoi(argv[2]));

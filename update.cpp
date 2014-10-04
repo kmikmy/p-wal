@@ -15,11 +15,11 @@ const uint32_t Delta = 500; // Delta(ms)でロックが獲得できない場合�
 
 extern TransTable trans_table;
 extern PageBufferEntry page_table[PAGE_N];
-extern map<uint32_t, uint32_t> DPT;
+extern map<uint32_t, uint32_t> dirty_page_table;
 
 extern void remove_transaction_xid(uint32_t xid);
 
-void WAL_update(OP op, uint32_t xid, int pageID, int th_id);
+void WAL_update(OP op, uint32_t xid, int page_id, int th_id);
 void begin_checkpoint();
 void begin(uint32_t xid, int th_id);
 void end(uint32_t xid, int th_id);
@@ -65,23 +65,20 @@ int
 update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int th_id){
   set<uint32_t> my_lock_table;
   OP op;
-  uint32_t pageID;
-
-  struct timeval start_t, end_t;
-  gettimeofday(&start_t, NULL);
+  uint32_t page_id;
   
   begin(xid, th_id);  // begin log write  
   for(int i=0;i<update_num;i++){
     op = ops[i];
-    pageID = page_ids[i];
+    page_id = page_ids[i];
 
-    PageBufferEntry *pbuf = &(page_table[pageID]);
+    PageBufferEntry *pbuf = &(page_table[page_id]);
 
     /* 
        自スレッドが該当ページのロックを取得していないなら、グローバルロックテーブルにロックをかけて、
        他に該当ページを更新するスレッドが先にいないかをチェックする。
      */
-    if(my_lock_table.find(pageID) == my_lock_table.end()){ 
+    if(my_lock_table.find(page_id) == my_lock_table.end()){ 
       /* 自スレッドが該当ページのロックをまだ獲得していない状態 */
       
       // 開始時間の計測
@@ -109,25 +106,22 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
       }
       
       //lockが完了したら、ロックテーブルに追加
-      my_lock_table.insert(pageID);
+      my_lock_table.insert(page_id);
     }
     else{ 
       ; //既に該当ページのロックを獲得している場合は何もしない
     }
-    WAL_update(op, xid, pageID, th_id);
+    WAL_update(op, xid, page_id, th_id);
   }
   end(xid, th_id); // end log write
-
-  gettimeofday(&end_t, NULL);
-
-  // cout << xid << ":" << (end_t.tv_sec - start_t.tv_sec)*1000*1000 + end_t.tv_usec - start_t.tv_usec << "(us)" << endl;
 
   lock_release(my_lock_table);
 
   return 0;
 }
-void WAL_update(OP op, uint32_t xid, int pageID, int th_id){
-  PageBufferEntry *pbuf = &page_table[pageID];
+
+void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
+  PageBufferEntry *pbuf = &page_table[page_id];
   // fixed flagがなければファイルから読み込んでfixする
 
 #ifdef DEBUG
@@ -143,15 +137,15 @@ void WAL_update(OP op, uint32_t xid, int pageID, int th_id){
       perror("open");
       exit(1);
     }
-    uint32_t log_end = lseek(fd, (off_t)sizeof(Page)*pageID, SEEK_SET);
+    uint32_t log_end = lseek(fd, (off_t)sizeof(Page)*page_id, SEEK_SET);
     //    Page p;
     if( -1 == read(fd, &pbuf->page, sizeof(Page))){
       perror("read"); exit(1);
     } 
-    pbuf->page_id = pageID;
+    pbuf->page_id = page_id;
 
     /* dirty_pages_tableのRecLSN更新(このLSNの後にディスク上ページに修正を加えていないログがあるかもしれないということを知るためのもの) */
-    DPT[pbuf->page_id] = log_end;
+    dirty_page_table[pbuf->page_id] = log_end;
 
     close(fd);
   }   
@@ -160,7 +154,7 @@ void WAL_update(OP op, uint32_t xid, int pageID, int th_id){
   //   LSNはログを書き込む直前に決定する
   log.TransID = xid;
   log.Type = UPDATE;
-  log.PageID = pageID;
+  log.PageID = page_id;
   log.PrevLSN = trans_table[xid].LastLSN;
   log.UndoNxtLSN = 0;
   log.op=op;
@@ -182,17 +176,17 @@ void WAL_update(OP op, uint32_t xid, int pageID, int th_id){
 
   // write 
   //  cout << "[Before Update]" << endl;
-  //  cout << "page[" << p.pageID << "]: page_LSN=" << p.page_LSN << ", value=" << p.value << endl;
+  //  cout << "page[" << p.page_id << "]: page_LSN=" << p.page_LSN << ", value=" << p.value << endl;
 
   /*  毎更新時にディスク上のページへforceしないのでコメントアウト */
   //  p.page_LSN = log.LSN;
-  //  lseek(fd,sizeof(Page)*pageID,SEEK_SET);
+  //  lseek(fd,sizeof(Page)*page_id,SEEK_SET);
   //  if( -1 == write(fd, &p, sizeof(Page))){
   //    perror("write"); exit(1);
   //  }    
 
   //  cout << "[After Update]" << endl;
-  //  cout << "page[" << p.pageID << "]: page_LSN=" << p.page_LSN << ", value=" << p.value << endl;  
+  //  cout << "page[" << p.page_id << "]: page_LSN=" << p.page_LSN << ", value=" << p.value << endl;  
 }
 
 void 

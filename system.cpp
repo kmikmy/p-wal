@@ -286,11 +286,13 @@ uint32_t ARIES_SYSTEM::xid_inc(){
   std::lock_guard<std::mutex> lock(mr_mtx);
   ++master_record.system_xid;
 
-  lseek(system_fd, 0, SEEK_SET);
-  if(write(system_fd, &master_record, sizeof(MasterRecord)) == -1){
-    perror("write");
-    exit(1);
-  };
+  /* normal_exit()時にまとめてマスターレコードを書き込む */
+
+  // lseek(system_fd, 0, SEEK_SET);
+  // if(write(system_fd, &master_record, sizeof(MasterRecord)) == -1){
+  //   perror("write");
+  //   exit(1);
+  // };
 
   return master_record.system_xid;
 }

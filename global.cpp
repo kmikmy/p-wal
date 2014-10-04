@@ -2,5 +2,5 @@
 #include <map>
 
 PageBufferEntry page_table[PAGE_N];
-std::map<uint32_t, uint32_t> DPT;
+std::map<uint32_t, uint32_t> dirty_page_table;
 
