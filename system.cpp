@@ -7,6 +7,9 @@
 #include <iostream>
 #include <pthread.h>
 
+#define CAS(addr, oldval, newval) __sync_bool_compare_and_swap(addr, oldval, newval)
+#define CAS64(addr, oldval, newval) __sync_bool_compare_and_swap((long *)addr, *(long *)&oldval, *(long *)&newval
+#define CAS128(addr, oldval, newval) __sync_bool_compare_and_swap((__int128_t *)(addr), *(__int128_t *)&(oldval), *(__int128_t *)&(newval))
 #define _DEBUG
 
 using namespace std;
@@ -283,8 +286,11 @@ redo_test(){
 
 uint32_t ARIES_SYSTEM::xid_inc(){
 
-  std::lock_guard<std::mutex> lock(mr_mtx);
-  ++master_record.system_xid;
+  int old, new_val;
+  do {
+    old = master_record.system_xid;
+    new_val = old+1;
+  }while(!CAS(&master_record.system_xid, old, new_val));
 
   /* normal_exit()時にまとめてマスターレコードを書き込む */
 
@@ -294,7 +300,8 @@ uint32_t ARIES_SYSTEM::xid_inc(){
   //   exit(1);
   // };
 
-  return master_record.system_xid;
+  return new_val;
+
 }
 
 int ARIES_SYSTEM::abnormal_exit(){

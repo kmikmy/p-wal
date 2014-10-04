@@ -17,9 +17,11 @@ clean:
 
 aries: $(objs)
 	$(CC) $(CFLAGS) -c logger.cpp 
+	$(CC) $(CFLAGS) -c system.cpp 
 	$(CC) $(CFLAGS) -o $(program).exe $^
 
 aries_fio: $(objs)
 	$(CC) $(CFLAGS) -DFIO -c logger.cpp 
+	$(CC) $(CFLAGS) -DFIO -c system.cpp 
 	$(CC) $(CFLAGS) -o $(program)_fio.exe $(objs)
 

@@ -3,6 +3,9 @@
 
 using namespace std;
 
+#define CAS(addr, oldval, newval) __sync_bool_compare_and_swap(addr, oldval, newval)
+#define CAS64(addr, oldval, newval) __sync_bool_compare_and_swap((long *)addr, *(long *)&oldval, *(long *)&newval
+#define CAS128(addr, oldval, newval) __sync_bool_compare_and_swap((__int128_t *)(addr), *(__int128_t *)&(oldval), *(__int128_t *)&(newval))
 // #define DEBUG
 
 #define NUM_GROUP_COMMIT 10
@@ -14,7 +17,10 @@ using namespace std;
 const char* Logger::logpath = "/work/kamiya/log.dat";
 #else
 const char* Logger::logpath = "/dev/fioa";
+static uint32_t global_lsn;
 #endif
+
+
 
 /* 
    LogBuffer:
@@ -115,6 +121,7 @@ class LogBuffer{
   }
 
   off_t next_lsn(){
+#ifndef FIO
     off_t pos;
     LogHeader lh;
     
@@ -128,11 +135,25 @@ class LogBuffer{
     
     pos = sizeof(LogHeader) + (lh.count + size()) * sizeof(Log);
     return pos;
+
+#else
+
+    int old, new_val;
+    do {
+      old = global_lsn;
+      new_val = old+1;
+    }while(!CAS(&global_lsn, old, new_val));
+  
+    return new_val;
+
+#endif    
+
   }
   
 };
 
 static LogBuffer logBuffer[NUM_MAX_CORE];
+
 
 
 std::ostream& operator<<( std::ostream& os, OP_TYPE& opt){
