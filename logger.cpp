@@ -8,7 +8,10 @@ using namespace std;
 #define CAS128(addr, oldval, newval) __sync_bool_compare_and_swap((__int128_t *)(addr), *(__int128_t *)&(oldval), *(__int128_t *)&(newval))
 // #define DEBUG
 
-#define NUM_GROUP_COMMIT 10
+#ifndef NUM_GROUP_COMMIT
+#define NUM_GROUP_COMMIT 1
+#endif
+
 #define NUM_MAX_CORE 7
  // 1GB
 #define LOG_OFFSET (1073741824)

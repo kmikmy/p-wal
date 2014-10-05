@@ -1,4 +1,5 @@
 #include "ARIES.h"
+#include <sys/time.h>
 #include <iostream>
 
 //#define DEBUG
@@ -11,20 +12,15 @@ using namespace std;
    QUEUEがemptyの状態とfullの状態を区別するために、fullの状態は１つ分だけ要素が空いているようにするので、
    キューに入る最大要素+1が実際のキューのサイズとする.
 */
-//#define MAX_QUEUE_SIZE 10000000 + 1 
-#define MAX_QUEUE_SIZE 100 + 1 
+#define MAX_QUEUE_SIZE 1000000 + 1 
+//#define MAX_QUEUE_SIZE 100 + 1 
 /* processing thread の 最大数 */
 #define MAX_WORKER_THREAD 7
 
 
 /* 
    TransQueue:
-   
-   vectorでqueueを実装.
-   std::queue.front()は参照を返すので、popで削除すると問題があるため.
 */
-
-
 class TransQueue{
 private:
   pthread_mutex_t mutex;
@@ -91,7 +87,6 @@ extern uint32_t construct_transaction(Transaction *trans);
 extern void start_transaction(uint32_t xid, int th_id);
 extern void  append_transaction(Transaction trans);
 
-TransQueue trans_queue;
 TransQueue trans_queues[MAX_WORKER_THREAD]; 
 
 /* 
@@ -106,17 +101,52 @@ static bool rest_flag;
    trans_queuesにトランザクションをまとめて詰め込む。
  */
 static 
-void *
-trans_queues_init(uint32_t ntrans){
-  return NULL;
+void 
+trans_queues_init(uint32_t ntrans, uint32_t nqueue){
+#ifdef DEBUG
+  cout << "[creating trans_queue]" << endl;
+#endif
+
+#ifndef BATCH_TEST
+  nqueue = 1;
+#endif
+
+  uint32_t n_each_queue = ntrans / nqueue;
+  uint32_t reminder = ntrans % nqueue;
+
+  Transaction trans;
+  construct_transaction(&trans);
+
+  for(uint32_t i=0;i<n_each_queue;i++){
+    for(uint32_t j=0;j<nqueue;j++){
+      trans_queues[j].push(trans);
+      trans.TransID++;
+    }
+  }
+
+  for(uint32_t j=0;j<reminder;j++){
+    trans_queues[j].push(trans);
+    trans.TransID++;
+  }
+
+  //  struct timeval t;
+  //  gettimeofday(&t,NULL);
+
+
+#ifdef DEBUG  
+  cout << "[start processing]" << endl;
+#endif
+
+  return;
 }
 
 static
 void *
-manage_queue_thread(void *_ntrans){
-  int ntrans = *((int *)_ntrans);
-  int cnt = ntrans;
-  free(_ntrans);
+manage_queue_thread(void *_args){
+  ProArg args = *((ProArg *)_args);
+  int cnt = args.ntrans;
+  int nqueue = args.nqueue;
+  //   free(_args);
 
   int cpu = 0;
   cpu_set_t mask;
@@ -129,25 +159,26 @@ manage_queue_thread(void *_ntrans){
   sched_setaffinity(0, sizeof(mask), &mask);
 
   while(cnt > 0){
-    trans_queue.lock(); // critical section start
+    trans_queues[0].lock(); // critical section start
 
     // 一度ロックを取ったらtrans_queueが一杯になるまでトランザクションをキューにプッシュする
-    while(!trans_queue.full() && cnt > 0){ 
+    while(!trans_queues[0].full() && cnt > 0){ 
       Transaction trans;
       construct_transaction(&trans);
-      trans_queue.push(trans);
+      trans_queues[0].push(trans);
 
       cnt--;
+
 #ifdef DEBUG
       cout << pthread_self() << ") cnt: " << cnt << endl;
 #endif
     }
 
-    if(trans_queue.full()){ 
+    if(trans_queues[0].full()){ 
       //      cout << "trans_queue is full" << endl;
     }
 
-    trans_queue.unlock(); // critical section end
+    trans_queues[0].unlock(); // critical section end
     //      usleep(1000);
   }
   rest_flag = false; // process_queue_threadに終了を通知する 
@@ -159,7 +190,7 @@ static
 void *
 process_queue_thread(void *_th_id){
   int th_id = *((int *)_th_id);
-  free(_th_id);
+  //  free(_th_id);
 
   Transaction trans;
 
@@ -173,40 +204,57 @@ process_queue_thread(void *_th_id){
   /* set affinity to current process */
   sched_setaffinity(0, sizeof(mask), &mask);
 
-  /* queueにタスクがある or これからまだタスクが追加される　間はループ */
-  while(!trans_queue.empty() || rest_flag){
-    /* この間にqueueが空になる可能性がある */
-    trans_queue.lock();    /* critical section start*/
+  int queue_id = th_id;
+#ifndef BATCH_TEST
+  queue_id = 0; // 全てのスレッドで同じキューを見る
+#endif
 
-    if(trans_queue.empty()){ // emptyなら少し待って再度上のwhileへ
-      trans_queue.unlock(); /* critical section end */ 
+  /* queueにタスクがある or これからまだタスクが追加される　間はループ */
+  while(!trans_queues[queue_id].empty() || rest_flag){
+    /* この間にqueueが空になる可能性がある */
+    trans_queues[queue_id].lock();    /* critical section start*/
+
+    if(trans_queues[queue_id].empty()){ // emptyなら少し待って再度上のwhileへ
+      trans_queues[queue_id].unlock(); /* critical section end */ 
       //      usleep(10);
       continue;
     }
 
-    trans = trans_queue.front();
-    trans_queue.pop();
+    trans = trans_queues[queue_id].front();
+    trans_queues[queue_id].pop();
 
-    trans_queue.unlock(); /* critical section end */ 
+    trans_queues[queue_id].unlock(); /* critical section end */ 
     
     append_transaction(trans);
     // transactionの開始
     start_transaction(trans.TransID, th_id);
-
 
   }
   return NULL;
 }
 
 
+static 
+void *dummy_func(void *){
+  return NULL;
+}
+
 
 pthread_t
 gen_producer_thread(int _ntrans, int _nqueue){
     pthread_t th;
-
-    trans_queue.init();
     rest_flag = true;
 
+#ifdef BATCH_TEST
+    trans_queues_init(_ntrans, _nqueue);
+    rest_flag = false;
+    if( pthread_create(&th, NULL, dummy_func, NULL) != 0 ){
+      perror("pthread_create()");
+      exit(1);
+    }
+    return th;
+
+#else
     ProArg *args = (ProArg *)malloc(sizeof(ProArg)); 
     args->ntrans = _ntrans;
     args->nqueue = _nqueue;
@@ -219,8 +267,9 @@ gen_producer_thread(int _ntrans, int _nqueue){
       perror("pthread_create()");
       exit(1);
     }
-
     return th;
+#endif
+
 }
 
 

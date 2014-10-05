@@ -328,8 +328,6 @@ ARIES_SYSTEM::normal_exit()
     exit(1);
   };
 
-  pthread_exit(NULL); // 他のスレッドが終了するのを待ってから、自スレッドを終了する. (unfixedスレッドモード用)
-
   return 1;
 }
 

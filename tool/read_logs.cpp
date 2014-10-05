@@ -46,6 +46,7 @@ std::ostream& operator<<( std::ostream& os, LOG_TYPE& type){
 
 int main(){
   int fd;
+  uint32_t total=0;
 
   if( (fd = open(log_path,  O_RDONLY )) == -1){
     perror("open");
@@ -65,7 +66,8 @@ int main(){
     if(read(fd, &lh, sizeof(LogHeader)) == -1){
       perror("read"); exit(1);
     }
-    cout << "the number of logs is " << lh.count << "." << endl;  
+    cout << "the number of logs is " << lh.count << "" << endl;  
+    total+=lh.count;
     
     for(unsigned i=0;i<lh.count;i++){
       Log log;
@@ -79,10 +81,12 @@ int main(){
       
       if(log.Type != BEGIN && log.Type != END)
 	cout << ", PrevLSN=" << log.PrevLSN << ", UndoNxtLSN=" << log.UndoNxtLSN << ", PageID=" << log.PageID << ", before=" << log.before << ", after=" << log.after << ", op.op_type=" << log.op.op_type << ", op.amount=" << log.op.amount;
-      
-      
+
+
       cout << endl;
     }
   }
+
+  cout << "# total log is " << total << endl;
   return 0;
 }
