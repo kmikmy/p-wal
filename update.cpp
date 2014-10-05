@@ -14,6 +14,9 @@ enum UP_OPTYPE { _EXIT, _INC, _DEC, _SUBST, _SYSTEM_FAILURE };
 const uint32_t Delta = 500; // Delta(ms)でロックが獲得できない場合はrollbackする。
 
 extern TransTable trans_table;
+/* trans_tableを変更する際にはロックが必要 */
+extern std::mutex trans_table_mutex;
+
 extern PageBufferEntry page_table[PAGE_N];
 extern map<uint32_t, uint32_t> dirty_page_table;
 
@@ -155,7 +158,7 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
   log.TransID = xid;
   log.Type = UPDATE;
   log.PageID = page_id;
-  log.PrevLSN = trans_table[xid].LastLSN;
+
   log.UndoNxtLSN = 0;
   log.op=op;
   log.before = pbuf->page.value;
@@ -170,7 +173,12 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
 
   //  ARIES_SYSTEM::transtable_debug();
 
+  std::lock_guard<std::mutex> lock(trans_table_mutex);
+  log.PrevLSN = trans_table.at(xid).LastLSN;
+
   Logger::log_write(&log, th_id);
+
+  
 
   trans_table[xid].LastLSN = log.LSN; // Transaction tableの更新
 
@@ -197,6 +205,8 @@ begin(uint32_t xid, int th_id=0){
   log.Type = BEGIN;
 
   Logger::log_write(&log,th_id);
+
+  std::lock_guard<std::mutex> lock(trans_table_mutex);
   trans_table[xid].LastLSN = log.LSN;
 #ifdef DEBUG
   Logger::log_debug(log);  
@@ -215,9 +225,12 @@ end(uint32_t xid, int th_id=0){
   memset(&log,0,sizeof(log));
   log.TransID = xid;
   log.Type = END;
-  log.PrevLSN = trans_table[xid].LastLSN;
+  
+  std::lock_guard<std::mutex> lock(trans_table_mutex);
+  log.PrevLSN = trans_table.at(xid).LastLSN;
 
   Logger::log_write(&log,th_id);
+
   trans_table[xid].LastLSN = log.LSN;
 #ifdef DEBUG
   Logger::log_debug(log);  
@@ -236,7 +249,7 @@ rollback(uint32_t xid){
     perror("open"); exit(1);
   }
 
-  uint32_t lsn = trans_table[xid].LastLSN; // rollbackするトランザクションの最後のLSN
+  uint32_t lsn = trans_table.at(xid).LastLSN; // rollbackするトランザクションの最後のLSN
 
   Log log;
   while(lsn != 0){ // lsnが0になるのはprevLSNが0のBEGINログを処理した後
@@ -266,11 +279,14 @@ rollback(uint32_t xid){
       memset(&clog,0,sizeof(Log));
       clog.Type = COMPENSATION;
       clog.TransID = log.TransID;
-      clog.PrevLSN = trans_table[xid].LastLSN;
+
       clog.PageID = log.PageID;
       clog.UndoNxtLSN = log.PrevLSN;
       // clog.before isn't needed because compensation log record is redo-only.
       clog.after = log.before;
+
+      std::lock_guard<std::mutex> lock(trans_table_mutex);
+      clog.PrevLSN = trans_table.at(xid).LastLSN;
 
 
       // compensation log recordをどこに書くかという問題はひとまず置いておく
@@ -292,11 +308,14 @@ rollback(uint32_t xid){
       memset(&clog,0,sizeof(Log));
       clog.Type = COMPENSATION;
       clog.TransID = log.TransID;
-      clog.PrevLSN = trans_table[xid].LastLSN;
       // clog.before isn't needed because compensation log record is redo-only.
       clog.UndoNxtLSN = log.PrevLSN;
 
+      std::lock_guard<std::mutex> lock(trans_table_mutex);
+      clog.PrevLSN = trans_table.at(xid).LastLSN;
+
       Logger::log_write(&clog, 0);
+      // compensation logはcompensateされないのでtransaction tableに記録する必要はない
       //      trans_table[xid].LastLSN = clog.LSN;
 #ifdef DEBUG
       Logger::log_debug(clog);

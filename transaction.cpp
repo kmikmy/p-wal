@@ -55,7 +55,7 @@ construct_transaction(Transaction *trans){
 
 
 /* trans_tableを変更する際にはロックが必要 */
-static std::mutex trans_table_mutex;
+std::mutex trans_table_mutex;
 
 void 
 append_transaction(Transaction trans){
