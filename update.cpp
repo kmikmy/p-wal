@@ -29,6 +29,8 @@ void end(uint32_t xid, int th_id);
 void rollback(uint32_t xid);
 
 
+static int page_fd;
+static std::mutex page_mtx;
 
 std::istream& 
 operator>>( std::istream& is, UP_OPTYPE& i )
@@ -135,22 +137,26 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
     pbuf->fixed_flag = true;
     pbuf->modified_flag = true;
 
-    int fd;
-    if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat", O_CREAT | O_RDONLY )) == -1){
-      perror("open");
-      exit(1);
+    std::lock_guard<std::mutex> lock(page_mtx);  
+    if( page_fd == 0 ){
+      if((page_fd = open("/home/kamiya/hpcs/aries/data/pages.dat", O_CREAT | O_RDONLY )) == -1){
+	perror("open");
+	exit(1);
+      }
     }
-    uint32_t log_end = lseek(fd, (off_t)sizeof(Page)*page_id, SEEK_SET);
+    uint32_t log_end = lseek(page_fd, (off_t)sizeof(Page)*page_id, SEEK_SET);
     //    Page p;
-    if( -1 == read(fd, &pbuf->page, sizeof(Page))){
+    if( -1 == read(page_fd, &pbuf->page, sizeof(Page))){
       perror("read"); exit(1);
     } 
     pbuf->page_id = page_id;
 
-    /* dirty_pages_tableのRecLSN更新(このLSNの後にディスク上ページに修正を加えていないログがあるかもしれないということを知るためのもの) */
+    /* 
+       dirty_pages_tableのRecLSN更新(このLSNの後にディスク上ページに修正を加えていないログがあるかもしれないということを知るためのもの) 
+       すなわちRecLSNはページの更新が確定している時点のLSN
+    */
     dirty_page_table[pbuf->page_id] = log_end;
 
-    close(fd);
   }   
 
   Log log;
@@ -331,20 +337,16 @@ rollback(uint32_t xid){
 
 void 
 flush_page(){
-  int fd;
-  if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat", O_CREAT | O_WRONLY )) == -1){
-    perror("open");
-    exit(1);
-  }
+
+  std::lock_guard<std::mutex> lock(page_mtx);  
   
   for(int i=0;i<PAGE_N;i++){
     if(!page_table[i].fixed_flag)
       continue;
 
-    lseek(fd,sizeof(Page)*page_table[i].page_id, SEEK_SET);
-    if( -1 == write(fd, &page_table[i].page, sizeof(Page))){
+    lseek(page_fd,sizeof(Page)*page_table[i].page_id, SEEK_SET);
+    if( -1 == write(page_fd, &page_table[i].page, sizeof(Page))){
       perror("write"); exit(1);
     }
   }    
-  close(fd);
 }
