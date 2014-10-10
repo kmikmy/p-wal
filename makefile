@@ -2,7 +2,7 @@
 program = aries
 objs = main.o transaction.o system.o logger.o update.o global.o buffer.o queue_mgr.o
 CC = g++
-CFLAGS = -g -Wall -O2 -std=c++0x -lpthread
+CFLAGS = -g -Wall -O2 -std=c++0x -lpthread -lprofiler
 
 all: aries aries_batch aries_fio aries_fio_batch
 

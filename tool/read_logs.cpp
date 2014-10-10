@@ -15,6 +15,7 @@ static const char* log_path = "/work/kamiya/log.dat";
 #else
 #define NUM_MAX_LOGFILE 7
 static const char* log_path = "/dev/fioa";
+//static const char* log_path = "/dev/shm/kamiya/log.dat";
 #endif
 
 

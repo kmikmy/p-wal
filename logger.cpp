@@ -20,6 +20,7 @@ using namespace std;
 const char* Logger::logpath = "/work/kamiya/log.dat";
 #else
 const char* Logger::logpath = "/dev/fioa";
+//const char* Logger::logpath = "/dev/shm/kamiya/log.dat";
 static uint32_t global_lsn;
 #endif
 
@@ -45,7 +46,7 @@ class LogBuffer{
 
   LogBuffer(){
     clear();
-    log_fd = open(Logger::logpath, O_CREAT | O_RDWR | O_SYNC);
+    log_fd = open(Logger::logpath, O_CREAT | O_RDWR | O_SYNC, 0666);
   }
 
   void
