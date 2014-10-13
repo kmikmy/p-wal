@@ -144,18 +144,23 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
 	exit(1);
       }
     }
-    uint32_t log_end = lseek(page_fd, (off_t)sizeof(Page)*page_id, SEEK_SET);
+    lseek(page_fd, (off_t)sizeof(Page)*page_id, SEEK_SET);
+
+
     //    Page p;
     if( -1 == read(page_fd, &pbuf->page, sizeof(Page))){
       perror("read"); exit(1);
     } 
     pbuf->page_id = page_id;
 
+    uint32_t rec_LSN = pbuf->page.page_LSN;
+
     /* 
-       dirty_pages_tableのRecLSN更新(このLSNの後にディスク上ページに修正を加えていないログがあるかもしれないということを知るためのもの) 
-       すなわちRecLSNはページの更新が確定している時点のLSN
+       dirty_pages_tableのRecLSN更新
+       RecLSNはそのページの更新が確実に反映されているログのLSN。
+       リカバリ時にはそれ以降のLSNについてログからupdate内容を適用しなおさなければいけない。
     */
-    dirty_page_table[pbuf->page_id] = log_end;
+    dirty_page_table[pbuf->page_id] = rec_LSN;
 
   }   
 
