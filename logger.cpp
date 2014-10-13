@@ -9,7 +9,7 @@ using namespace std;
 // #define DEBUG
 
 #ifndef NUM_GROUP_COMMIT
-#define NUM_GROUP_COMMIT 1
+#define NUM_GROUP_COMMIT 8
 #endif
 
 #define NUM_MAX_CORE 7

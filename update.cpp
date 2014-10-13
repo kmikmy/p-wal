@@ -117,6 +117,7 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
       ; //既に該当ページのロックを獲得している場合は何もしない
     }
     WAL_update(op, xid, page_id, th_id);
+    // usleep(100);
   }
   end(xid, th_id); // end log write
 

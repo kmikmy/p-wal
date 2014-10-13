@@ -78,8 +78,9 @@ typedef struct {
   uint32_t PageID;
   int before;
   int after;
-  OP op;
-} Log;
+  OP op; // 8バイト
+  char padding[24];
+} Log; // 64バイト
 
 
 typedef struct{
