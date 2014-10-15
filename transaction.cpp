@@ -59,14 +59,14 @@ std::mutex trans_table_mutex;
 
 void 
 append_transaction(Transaction trans){
-  std::lock_guard<std::mutex> lock(trans_table_mutex);
-  trans_table[trans.TransID] = trans;
+  //  std::lock_guard<std::mutex> lock(trans_table_mutex);
+  //  trans_table[trans.TransID] = trans;
 }
 
 void 
 remove_transaction_xid(uint32_t xid){
-  std::lock_guard<std::mutex> lock(trans_table_mutex);
-  trans_table.erase(trans_table.find(xid));
+  //  std::lock_guard<std::mutex> lock(trans_table_mutex);
+  //  trans_table.erase(trans_table.find(xid));
 }
 
 /* 

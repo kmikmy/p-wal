@@ -184,15 +184,13 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
   log.after = pbuf->page.value;
 
   //  ARIES_SYSTEM::transtable_debug();
-
-  std::lock_guard<std::mutex> lock(trans_table_mutex);
-  log.PrevLSN = trans_table.at(xid).LastLSN;
+  
+  //  std::lock_guard<std::mutex> lock(trans_table_mutex);
+  //  log.PrevLSN = trans_table.at(xid).LastLSN;
 
   Logger::log_write(&log, th_id);
+  //  trans_table[xid].LastLSN = log.LSN; // Transaction tableの更新
 
-  
-
-  trans_table[xid].LastLSN = log.LSN; // Transaction tableの更新
 
   // write 
   //  cout << "[Before Update]" << endl;
@@ -218,8 +216,8 @@ begin(uint32_t xid, int th_id=0){
 
   Logger::log_write(&log,th_id);
 
-  std::lock_guard<std::mutex> lock(trans_table_mutex);
-  trans_table[xid].LastLSN = log.LSN;
+  //   std::lock_guard<std::mutex> lock(trans_table_mutex);
+  //   trans_table[xid].LastLSN = log.LSN;
 #ifdef DEBUG
   Logger::log_debug(log);  
 #endif
@@ -238,12 +236,12 @@ end(uint32_t xid, int th_id=0){
   log.TransID = xid;
   log.Type = END;
   
-  std::lock_guard<std::mutex> lock(trans_table_mutex);
-  log.PrevLSN = trans_table.at(xid).LastLSN;
+  //  std::lock_guard<std::mutex> lock(trans_table_mutex);
+  //  log.PrevLSN = trans_table.at(xid).LastLSN;
 
   Logger::log_write(&log,th_id);
 
-  trans_table[xid].LastLSN = log.LSN;
+  //  trans_table[xid].LastLSN = log.LSN;
 #ifdef DEBUG
   Logger::log_debug(log);  
 #endif
@@ -260,7 +258,7 @@ rollback(uint32_t xid){
   if(log_fd == -1){
     perror("open"); exit(1);
   }
-
+  
   uint32_t lsn = trans_table.at(xid).LastLSN; // rollbackするトランザクションの最後のLSN
 
   Log log;
@@ -297,14 +295,14 @@ rollback(uint32_t xid){
       // clog.before isn't needed because compensation log record is redo-only.
       clog.after = log.before;
 
-      std::lock_guard<std::mutex> lock(trans_table_mutex);
-      clog.PrevLSN = trans_table.at(xid).LastLSN;
+      // std::lock_guard<std::mutex> lock(trans_table_mutex);
+      // clog.PrevLSN = trans_table.at(xid).LastLSN;
 
 
       // compensation log recordをどこに書くかという問題はひとまず置いておく
       // とりあえず全部同じログブロックに書く
       ret = Logger::log_write(&clog, 0); 
-      trans_table[xid].LastLSN = clog.LSN;
+      // trans_table[xid].LastLSN = clog.LSN;
 
 #ifdef DEBUG
       Logger::log_debug(clog);
@@ -323,8 +321,8 @@ rollback(uint32_t xid){
       // clog.before isn't needed because compensation log record is redo-only.
       clog.UndoNxtLSN = log.PrevLSN;
 
-      std::lock_guard<std::mutex> lock(trans_table_mutex);
-      clog.PrevLSN = trans_table.at(xid).LastLSN;
+      // std::lock_guard<std::mutex> lock(trans_table_mutex);
+      // clog.PrevLSN = trans_table.at(xid).LastLSN;
 
       Logger::log_write(&clog, 0);
       // compensation logはcompensateされないのでtransaction tableに記録する必要はない
