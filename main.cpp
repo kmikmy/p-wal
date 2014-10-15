@@ -37,8 +37,8 @@ int main(int argc, char *argv[]){
     int th_num = atoi(argv[2]);
     int cpunum = sysconf(_SC_NPROCESSORS_ONLN);
 
-    if(th_num > MAX_CORE_NUM-1 || th_num > cpunum-1){
-      cout << "Usage: ./a.out xact_num th_num(<=" << (MAX_CORE_NUM<cpunum?MAX_CORE_NUM-1:cpunum-1) << ")" << endl;
+    if(th_num > NUM_MAX_WORKER || th_num > cpunum-1){
+      cout << "Usage: ./a.out xact_num th_num(<=" << (NUM_MAX_WORKER<cpunum?NUM_MAX_WORKER-1:cpunum-1) << ")" << endl;
       return 0;
     }
     fixed_thread_mode(atoi(argv[1]), atoi(argv[2]));

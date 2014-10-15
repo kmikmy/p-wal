@@ -206,7 +206,7 @@ process_queue_thread(void *_th_id){
 
   int queue_id = th_id;
 #ifndef BATCH_TEST
-  queue_id = 0; // 全てのスレッドで同じキューを見る
+  queue_id = 0; // 全てのスレッドで同じキューを見る。その単一キューにcreaterスレッドがエントリをプッシュしていく。
 #endif
 
   /* queueにタスクがある or これからまだタスクが追加される　間はループ */
@@ -278,7 +278,7 @@ gen_worker_thread(int nthread){
     pthread_t th[MAX_WORKER_THREAD];
 
     Logger::init();
-    
+
     for(int i=0; i<nthread; i++){
       int *_th_id = (int *)malloc(sizeof(int));
       *_th_id=i;

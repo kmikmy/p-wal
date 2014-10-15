@@ -13,7 +13,7 @@
 
 #define PAGE_N (4096*16)
 #define MAX_UPDATE 100
-#define MAX_CORE_NUM 8
+#define NUM_MAX_WORKER 7
 
 enum LOG_TYPE { UPDATE, COMPENSATION, PREPARE, BEGIN, END, OSfile_return};
 enum OP_TYPE { NONE, INC,DEC,SUBST };

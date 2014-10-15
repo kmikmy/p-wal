@@ -12,7 +12,6 @@ using namespace std;
 #define NUM_GROUP_COMMIT 8
 #endif
 
-#define NUM_MAX_CORE 7
  // 1GB
 #define LOG_OFFSET (1073741824)
 
@@ -152,7 +151,7 @@ class LogBuffer{
   
 };
 
-static LogBuffer logBuffer[NUM_MAX_CORE];
+static LogBuffer logBuffer[NUM_MAX_WORKER];
 
 std::ostream& operator<<( std::ostream& os, OP_TYPE& opt){
   switch(opt){
@@ -183,7 +182,7 @@ std::ostream& operator<<( std::ostream& os, LOG_TYPE& type){
 /* 各logBufferにth_idを設定して、ヘッダーを読み込む*/
 void
 Logger::init(){
-  for(int i=0;i<MAX_CORE_NUM;i++){
+  for(int i=0;i<NUM_MAX_WORKER;i++){
     logBuffer[i].init(i);
   }
 }
@@ -207,7 +206,7 @@ Logger::log_write(Log *log, int th_id){
 
 void
 Logger::log_all_flush(){
-  for(int i=0;i<NUM_MAX_CORE;i++)
+  for(int i=0;i<NUM_MAX_WORKER;i++)
     if(!logBuffer[i].empty())
       logBuffer[i].flush();
 }
