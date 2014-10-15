@@ -24,8 +24,6 @@ const char* Logger::logpath = "/dev/fioa";
 static uint32_t global_lsn;
 #endif
 
-
-
 /* 
    LogBuffer:
    
@@ -37,12 +35,14 @@ class LogBuffer{
   static const unsigned MAX_LOG_SIZE=128;
   unsigned idx;
   int log_fd;
+  off_t base_addr;
+  LogHeader header;
+  int th_id;
 
  public:
   Log logs[MAX_LOG_SIZE];
   std::mutex log_mtx;
   unsigned num_commit;
-  int th_id;
 
   LogBuffer(){
     clear();
@@ -61,33 +61,36 @@ class LogBuffer{
   {
     return lseek(log_fd, 0, SEEK_CUR);
   }
+
+  void
+  init(int _th_id)
+  {
+    th_id = _th_id;
+
+    base_addr = (off_t)th_id * LOG_OFFSET;
+    lseek(log_fd, base_addr, SEEK_SET);
+    int ret = read(log_fd, &header, sizeof(LogHeader));
+    if(-1 == ret){
+      perror("read"); exit(1);
+    }
+  }
   
 
   /*
-    logHeaderはbaseアドレスに位置し、Logがその後に続く
+    logHeaderはbase_addrに位置し、Logがその後に続く
    */
   void 
   flush()
   {
-    LogHeader lh;
-    off_t base = (off_t)this->th_id * LOG_OFFSET;
-    
-    lseek(log_fd, base, SEEK_SET);
-    int ret = read(log_fd, &lh, sizeof(LogHeader));
-    if(-1 == ret){
-      perror("read"); exit(1);
-    }
- 
-    uint64_t save_count = lh.count;
-    lh.count += size();
+    uint64_t save_count = header.count;
+    header.count += size();
 
-    lseek(log_fd, base, SEEK_SET);
-    if(-1 == write(log_fd, &lh, sizeof(LogHeader))){;
+    lseek(log_fd, base_addr, SEEK_SET);
+    if(-1 == write(log_fd, &header, sizeof(LogHeader))){;
       perror("write"); exit(1);
     }
 
-
-    off_t pos = base + sizeof(LogHeader) + (save_count * sizeof(Log));
+    off_t pos = base_addr + sizeof(LogHeader) + (save_count * sizeof(Log));
 
     lseek(log_fd, pos, SEEK_SET);
     // lseek(log_fd, 0, SEEK_END);
@@ -127,17 +130,10 @@ class LogBuffer{
   off_t next_lsn(){
 #ifndef FIO
     off_t pos;
-    LogHeader lh;
     
-    lseek(log_fd, th_id*LOG_OFFSET, SEEK_SET);
-
-    int ret = read(log_fd, &lh, sizeof(LogHeader));
-    if(-1 == ret){
-      perror("read");
-      exit(1);
-    }
+    lseek(log_fd, base_addr, SEEK_SET);
     
-    pos = sizeof(LogHeader) + (lh.count + size()) * sizeof(Log);
+    pos = sizeof(LogHeader) + (header.count + size()) * sizeof(Log);
     return pos;
 
 #else
@@ -157,8 +153,6 @@ class LogBuffer{
 };
 
 static LogBuffer logBuffer[NUM_MAX_CORE];
-
-
 
 std::ostream& operator<<( std::ostream& os, OP_TYPE& opt){
   switch(opt){
@@ -186,11 +180,12 @@ std::ostream& operator<<( std::ostream& os, LOG_TYPE& type){
 }
 
 
-/* 各logBufferにth_idを指定する*/
+/* 各logBufferにth_idを設定して、ヘッダーを読み込む*/
 void
 Logger::init(){
-  for(int i=0;i<MAX_CORE_NUM;i++)
-    logBuffer[i].th_id = i;
+  for(int i=0;i<MAX_CORE_NUM;i++){
+    logBuffer[i].init(i);
+  }
 }
 
 int 
