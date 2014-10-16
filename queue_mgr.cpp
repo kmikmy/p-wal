@@ -12,10 +12,10 @@ using namespace std;
    QUEUEがemptyの状態とfullの状態を区別するために、fullの状態は１つ分だけ要素が空いているようにするので、
    キューに入る最大要素+1が実際のキューのサイズとする.
 */
-#define MAX_QUEUE_SIZE 1000000 + 1 
+#define MAX_QUEUE_SIZE 100000 + 1 
 //#define MAX_QUEUE_SIZE 100 + 1 
 /* processing thread の 最大数 */
-#define MAX_WORKER_THREAD 7
+#define MAX_WORKER_THREAD 100
 
 
 /* 
@@ -156,7 +156,7 @@ manage_queue_thread(void *_args){
   CPU_SET(cpu, &mask);
 
   /* set affinity to current process */
-  sched_setaffinity(0, sizeof(mask), &mask);
+  //  sched_setaffinity(0, sizeof(mask), &mask);
 
   while(cnt > 0){
     trans_queues[0].lock(); // critical section start
@@ -202,7 +202,7 @@ process_queue_thread(void *_th_id){
   CPU_SET(cpu, &mask);
 
   /* set affinity to current process */
-  sched_setaffinity(0, sizeof(mask), &mask);
+  //  sched_setaffinity(0, sizeof(mask), &mask);
 
   int queue_id = th_id;
 #ifndef BATCH_TEST

@@ -1,5 +1,5 @@
 echo "# thread,first time,second time,third time," > fio.csv
-for i in `seq 1 7`
+for i in `seq 1 30`
 do
 echo -n "${i}," >> fio.csv
     for j in `seq 1 3`
