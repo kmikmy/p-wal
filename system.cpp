@@ -88,20 +88,20 @@ static void recovery(){
   undo();
 }
 
-// Transactionテーブルをログから復元する
-static void 
-analysis(){
+
+static void
+seqential_analysis(){ 
   int log_fd = open(Logger::logpath, O_CREAT | O_RDONLY);
   if(log_fd == -1){
     perror("open"); exit(1);
   }
-
-  LogHeader lh;
+  
+  LogHeader header;
   lseek(log_fd, 0, SEEK_SET);
-  if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
+  if( -1 == read(log_fd, &header, sizeof(LogHeader))){
     perror("read"); exit(1);
   }
-  
+
   Log log;
   while(1){
     int ret = read(log_fd, &log, sizeof(Log));  
@@ -118,7 +118,7 @@ analysis(){
       trans.State=U;
       trans.LastLSN=log.LSN;
       trans.UndoNxtLSN=0;
-
+      
       append_transaction(trans);
     } 
     else if(log.Type == UPDATE){
@@ -136,15 +136,131 @@ analysis(){
     }
   }
 
-  cout << "++++++++++++++++transaction table++++++++++++++++++" << endl;
-  map<uint32_t, Transaction>::iterator it;
-  for(it=trans_table.begin(); it!=trans_table.end(); it++){
-    Transaction trans = it->second;
-    cout << "+ [" << trans.TransID << "] " << "State=" << trans.State << ", LastLSN=" << trans.LastLSN << ", UndoNxtLSN=" << trans.UndoNxtLSN << endl;
-  }
-  cout << "+++++++++++++++++++++++++++++++++++++++++++++++++++" << endl;
-
   close(log_fd);
+}
+
+
+#define ALOGBUF_SIZE
+
+class AnaLogBuffer{
+private:
+  int th_id;
+  LogHeader header;
+  off_t base_addr;
+  int log_fd;
+  off_t log_ptr;
+  uint32_t rest_nlog;
+
+  Log logs[ALOGBUF_SIZE];
+  int idx;
+  int nlog; // LogBuffer内の個数
+
+
+
+
+public:
+  AnaLogBuffer(){
+    clear();
+    log_fd = open(Logger::logpath, O_RDONLY | O_SYNC);
+  }
+
+
+  /* AnaLogBufferを使用する前に、ログ(スレッド)番号を与えて一度呼び出す */
+  void 
+  init(int _th_id)
+  {
+    th_id = _th_id;
+    base_addr = (off_t)th_id * LOG_OFFSET;
+    log_ptr = base_addr + sizeof(LogHeader);
+
+    lseek(log_fd, base_addr, SEEK_SET);
+    int ret = read(log_fd, &header, sizeof(LogHeader));
+    if(-1 == ret){
+      perror("read"); exit(1);
+    }
+    rest_nlog = header.count;
+
+    readLogs();
+  }
+
+  void
+  clear(){
+    idx=0;
+    memset(logs,0,sizeof(logs));
+  }
+
+  int
+  readLogs(){
+    nlog = ALOGBUF_SIZE<rest_nlog ? ALOGBUF_SIZE : rest_nlog;
+    if(nlog == 0){
+      return -1;
+    }
+
+    clear();
+    
+    int ret = read(log_fd, logs, sizeof(Log)*nlog);
+    if(-1 == ret){
+      perror("read"); exit(1);
+    }
+    rest_nlog -= nlog;
+  }
+  
+  //Logを一つ取り出す
+  Log
+  next()
+  {
+    // Logの再読み込み
+    if(idx == ALOGBUF_SIZE || idx == nlog){ 
+      readLogs();
+    }
+
+    return logs[idx++];
+  }
+  
+}
+
+
+static void
+parallel_analysis(){
+  int log_fd = open(Logger::logpath, O_CREAT | O_RDONLY);
+  if(log_fd == -1){
+    perror("open"); exit(1);
+  }
+
+  Log log_set[MAX_WORKER_THREAD][1000]; 
+  LogHeader header_set[MAX_WORKER_THREAD];
+  off_t base[MAX_WORKER_THREAD];
+
+  for(int i=0;i<MAX_WORKER_THREAD;i++){
+    base[i] = i * LOG_OFFSET;
+
+    lseek(log_fd, base[i], SEEK_SET);
+    if( -1 == read(log_fd, &header, sizeof(LogHeader))){
+      perror("read"); exit(1);
+    }
+
+    read();
+  }
+  
+  while(1){
+  }
+  
+  
+  
+}
+
+// Transactionテーブルをログから復元する
+static void 
+analysis(){
+
+#ifndef FIO
+  seqential_analysis();
+#else
+  parallel_analysis();
+#endif 
+
+  ARIES_SYSTEM::transtable_debug();
+  sleep(50);
 }
 
 static void 
