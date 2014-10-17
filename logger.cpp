@@ -9,11 +9,8 @@ using namespace std;
 // #define DEBUG
 
 #ifndef NUM_GROUP_COMMIT
-#define NUM_GROUP_COMMIT 50
+#define NUM_GROUP_COMMIT 1
 #endif
-
- // 1GB
-#define LOG_OFFSET (1073741824)
 
 #ifndef FIO
 const char* Logger::logpath = "/work/kamiya/log.dat";
@@ -65,7 +62,6 @@ class LogBuffer{
   init(int _th_id)
   {
     th_id = _th_id;
-
     base_addr = (off_t)th_id * LOG_OFFSET;
     lseek(log_fd, base_addr, SEEK_SET);
     int ret = read(log_fd, &header, sizeof(LogHeader));

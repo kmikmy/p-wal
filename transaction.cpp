@@ -22,7 +22,11 @@ extern map<uint32_t, uint32_t> dirty_page_table;
 extern void operation_select(OP *op);
 extern void page_select(uint32_t *page_id);
 extern int update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int th_id);
+extern void begin(uint32_t,int);
+extern void end(uint32_t,int);
+extern void WAL_update(OP op, uint32_t xid, int page_id, int th_id);
 static void flush_page();
+
 
 std::istream& 
 operator>>( std::istream& is, T_Mode& i )
@@ -59,14 +63,14 @@ std::mutex trans_table_mutex;
 
 void 
 append_transaction(Transaction trans){
-  //  std::lock_guard<std::mutex> lock(trans_table_mutex);
-  //  trans_table[trans.TransID] = trans;
+  std::lock_guard<std::mutex> lock(trans_table_mutex);
+  trans_table[trans.TransID] = trans;
 }
 
 void 
 remove_transaction_xid(uint32_t xid){
-  //  std::lock_guard<std::mutex> lock(trans_table_mutex);
-  //  trans_table.erase(trans_table.find(xid));
+  std::lock_guard<std::mutex> lock(trans_table_mutex);
+  trans_table.erase(trans_table.find(xid));
 }
 
 /* 
@@ -128,3 +132,33 @@ batch_start_transaction(int num){
   show_transaction_table();
 }
 
+void
+each_operation_mode(){
+  Transaction trans;
+  OP op;
+  uint32_t page_id;
+  int  m;
+
+  construct_transaction(&trans);
+  append_transaction(trans);
+
+  begin(trans.TransID,0);
+  do {
+    cout << "[UPDATE]:1, [END]:2, [EXIT]:0 ?" ;
+    cin >> m;
+    
+    switch (m){
+    case 1:
+      operation_select(&op);
+      page_select(&page_id);
+      WAL_update(op, trans.TransID, page_id, 0);
+      break;
+    case 2: 
+      end(trans.TransID,0);
+      break;
+    case 0: 
+      break;
+    default: cout << "Input Error! " << m << endl; 
+    }
+  } while(m && m!=2);
+}

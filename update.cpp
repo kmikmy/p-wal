@@ -21,8 +21,8 @@ extern PageBufferEntry page_table[PAGE_N];
 extern map<uint32_t, uint32_t> dirty_page_table;
 
 extern void remove_transaction_xid(uint32_t xid);
+extern void WAL_update(OP op, uint32_t xid, int page_id, int th_id);
 
-void WAL_update(OP op, uint32_t xid, int page_id, int th_id);
 void begin_checkpoint();
 void begin(uint32_t xid, int th_id);
 void end(uint32_t xid, int th_id);

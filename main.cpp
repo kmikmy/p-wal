@@ -3,12 +3,13 @@
 #include <iostream>
 #include <pthread.h>
 
-enum Mode { NORMAL_EXIT=0, T_START=1, FAILURE=2 };
+enum Mode { NORMAL_EXIT=0, T_START=1, FAILURE=2, EACH_OPERATION };
 using namespace std;
 
 extern void batch_start_transaction(int);
 extern pthread_t gen_producer_thread(int _ntrans, int _nqueue);
 extern void gen_worker_thread(int _nthread);
+extern void each_operation_mode();
 
 extern MasterRecord master_record;
 extern TransTable trans_table;
@@ -74,15 +75,18 @@ void interact_mode(){
 #endif 
   cout << "system_xid is " << ARIES_SYSTEM::master_record.system_xid << endl;
 
+  Logger::init();
+
   Mode  m;
   do {
-    cout << "[NORMAL EXIT]:0, [Trasaction Start]:1, [FAILURE]:2? " ;
+    cout << "[NORMAL EXIT]:0, [Trasaction Start]:1, [FAILURE]:2, [EACH_OPERATION]:3 ? " ;
     cin >> m;
     
     switch (m){
     case T_START: batch_start_transaction(1); break;
     case NORMAL_EXIT: ARIES_SYSTEM::normal_exit(); exit(0);
     case FAILURE: ARIES_SYSTEM::abnormal_exit(); exit(0);
+    case EACH_OPERATION: each_operation_mode(); break;
     default: cout << "The mode isn't exist: " << m << endl; 
     }
   } while(m);
