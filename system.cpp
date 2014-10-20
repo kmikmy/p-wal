@@ -94,7 +94,7 @@ static void recovery(){
 
 
 static void
-seqential_analysis(){ 
+sequential_analysis(){ 
   int log_fd = open(Logger::logpath, O_CREAT | O_RDONLY);
   if(log_fd == -1){
     perror("open"); exit(1);
@@ -338,19 +338,19 @@ parallel_analysis(){
 // Transactionテーブルをログから復元する
 static void 
 analysis(){
-  
 #ifndef FIO
-  seqential_analysis();
+  sequential_analysis();
 #else
   parallel_analysis();
 #endif 
 
   ARIES_SYSTEM::transtable_debug();
-  sleep(50);
+  sleep(10);
 }
 
-static void 
-redo(){
+
+static void
+sequential_redo(){
   memset(pages, 0, sizeof(pages));
   for(int i=0;i<PAGE_N;i++)
     pages[i].pageID = i+1;
@@ -403,7 +403,24 @@ redo(){
     cout << "failed redo test! It possibly need undo!" << endl << endl;
 }
 
-  static void 
+
+static void
+parallel_redo(){
+
+}
+
+static void 
+redo(){
+#ifndef FIO
+  sequential_redo();
+#else
+  parallel_redo();
+#endif 
+  
+}
+
+
+static void 
 undo(){
   int log_fd = open(Logger::logpath, O_RDONLY);
   if(log_fd == -1){

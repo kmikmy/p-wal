@@ -23,4 +23,6 @@ page_fix(int page_id){
     perror("read"); exit(1);
   } 
   pbuf->page_id = page_id;
+
+  close(fd);
 }
