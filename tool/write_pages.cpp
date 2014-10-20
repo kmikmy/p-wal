@@ -15,8 +15,11 @@ int main(){
 
   srand(21);
 
+  char *ARIES_HOME =  getenv("ARIES_HOME");
+  string page_filename = ARIES_HOME;
+  page_filename += "/data/pages.dat";
 
-  if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat", O_TRUNC | O_CREAT | O_WRONLY )) == -1){
+  if( (fd = open(page_filename.c_str(), O_TRUNC | O_CREAT | O_WRONLY )) == -1){
     perror("open");
     exit(1);
   }

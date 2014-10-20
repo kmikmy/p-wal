@@ -13,7 +13,11 @@ int main(){
 static void 
 read_master_record(){
   int system_fd;
-  if( (system_fd = open("/home/kamiya/hpcs/aries/data/system.dat", O_RDWR | O_SYNC | O_CREAT)) == -1 ){
+  char *ARIES_HOME =  getenv("ARIES_HOME");
+  string system_filename = ARIES_HOME;
+  system_filename += "/data/system.dat";
+
+  if( (system_fd = open(system_filename.c_str(), O_RDWR | O_SYNC | O_CREAT)) == -1 ){
     perror("open");
     exit(1);
   }

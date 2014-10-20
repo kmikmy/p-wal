@@ -24,8 +24,11 @@ void init(){
 
   int fd;
   MasterRecord master_record;
-
-  if( (fd = open("/home/kamiya/hpcs/aries/data/system.dat", O_RDWR | O_SYNC | O_CREAT )) == -1 ){
+  char *ARIES_HOME =  getenv("ARIES_HOME");
+  string system_filename = ARIES_HOME;
+  system_filename += "/data/system.dat";
+  
+  if( (fd = open(system_filename.c_str(), O_RDWR | O_SYNC | O_CREAT )) == -1 ){
     perror("open");
     exit(1);
   }

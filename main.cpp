@@ -14,6 +14,7 @@ extern void each_operation_mode();
 extern MasterRecord master_record;
 extern TransTable trans_table;
 extern PageBufferEntry pageBuffers[PAGE_N];
+extern char *ARIES_HOME;
 
 static void fixed_thread_mode(int n, int nthread);
 static void interact_mode();
@@ -27,6 +28,7 @@ std::istream& operator>>( std::istream& is, Mode& i )
 }
 
 int main(int argc, char *argv[]){
+  ARIES_HOME =  getenv("ARIES_HOME");
 
   if(argc == 1){
     interact_mode();

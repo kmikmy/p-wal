@@ -19,6 +19,7 @@ extern std::mutex trans_table_mutex;
 
 extern PageBufferEntry page_table[PAGE_N];
 extern map<uint32_t, uint32_t> dirty_page_table;
+extern char *ARIES_HOME;
 
 extern void remove_transaction_xid(uint32_t xid);
 extern void WAL_update(OP op, uint32_t xid, int page_id, int th_id);
@@ -138,9 +139,12 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
     pbuf->fixed_flag = true;
     pbuf->modified_flag = true;
 
-    std::lock_guard<std::mutex> lock(page_mtx);  
+    std::lock_guard<std::mutex> lock(page_mtx);
+    std::string page_filename = ARIES_HOME;
+    page_filename += "/data/pages.dat";
+
     if( page_fd == 0 ){
-      if((page_fd = open("/home/kamiya/hpcs/aries/data/pages.dat", O_CREAT | O_RDONLY )) == -1){
+      if( (page_fd = open(page_filename.c_str(), O_CREAT | O_RDONLY )) == -1){
 	perror("open");
 	exit(1);
       }

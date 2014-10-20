@@ -11,7 +11,11 @@ using namespace std;
 int main(){
   int fd;
 
-  if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat",  O_RDONLY )) == -1){
+  char *ARIES_HOME =  getenv("ARIES_HOME");
+  string page_filename = ARIES_HOME;
+  page_filename += "/data/pages.dat";
+
+  if( (fd = open(page_filename.c_str(),  O_RDONLY )) == -1){
     perror("open");
     exit(1);
   }

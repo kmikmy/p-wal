@@ -21,6 +21,7 @@ MasterRecord ARIES_SYSTEM::master_record;
 
 extern TransTable trans_table;
 extern PageBufferEntry page_table[PAGE_N];
+extern char* ARIES_HOME;
 
 static std::mutex mr_mtx;
 static int system_fd;
@@ -57,8 +58,10 @@ pbuf_lock_init(){
 static void
 load_master_record(){
   trans_table.clear();
+  std::string mr_filename = ARIES_HOME;
+  mr_filename += "/data/system.dat";
 
-  if( (system_fd = open("/home/kamiya/hpcs/aries/data/system.dat", O_RDWR | O_CREAT )) == -1 ){
+  if( (system_fd = open(mr_filename.c_str(), O_RDWR | O_CREAT )) == -1 ){
     perror("open");
     exit(1);
   }
@@ -442,7 +445,10 @@ page_table_debug(){
 static void 
 page_undo_write(unsigned n){
   int fd;
-  if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat",  O_WRONLY )) == -1){
+  std::string page_filename = ARIES_HOME;
+  page_filename += "/data/pages.dat";
+
+  if( (fd = open(page_filename.c_str(),  O_WRONLY )) == -1){
     perror("open");
     exit(1);
   }
@@ -459,8 +465,10 @@ page_undo_write(unsigned n){
 static bool 
 redo_test(){
   int fd;
-  
-  if( (fd = open("/home/kamiya/hpcs/aries/data/pages.dat",  O_RDONLY )) == -1){
+  std::string page_filename = ARIES_HOME;
+  page_filename += "/data/pages.dat";
+
+  if( (fd = open(page_filename.c_str(),  O_RDONLY )) == -1){
     perror("open");
     exit(1);
   }
