@@ -28,7 +28,7 @@ void init(){
   string system_filename = ARIES_HOME;
   system_filename += "/data/system.dat";
   
-  if( (fd = open(system_filename.c_str(), O_RDWR | O_SYNC | O_CREAT )) == -1 ){
+  if( (fd = open(system_filename.c_str(), O_RDWR | O_SYNC | O_CREAT, 0666 )) == -1 ){
     perror("open");
     exit(1);
   }
@@ -59,13 +59,13 @@ void init(){
   close(fd);
 
 #ifndef FIO
-  if( (fd = open(log_path, O_WRONLY | O_TRUNC | O_CREAT )) == -1 ){  
+  if( (fd = open(log_path, O_WRONLY | O_TRUNC | O_CREAT , 0666)) == -1 ){  
     perror("open");
     exit(1);
   }
 #endif
 #ifdef FIO
-  if( (fd = open(log_path, O_WRONLY )) == -1 ){  
+  if( (fd = open(log_path, O_WRONLY , 0666)) == -1 ){  
     perror("open");
     exit(1);
   }
