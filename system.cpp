@@ -5,6 +5,7 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include <iostream>
+#include <exception>
 #include <pthread.h>
 
 #define CAS(addr, oldval, newval) __sync_bool_compare_and_swap(addr, oldval, newval)
@@ -140,22 +141,20 @@ seqential_analysis(){
 }
 
 
-#define ALOGBUF_SIZE
+#define ALOGBUF_SIZE 1000
 
 class AnaLogBuffer{
 private:
-  int th_id;
-  LogHeader header;
-  off_t base_addr;
-  int log_fd;
-  off_t log_ptr;
-  uint32_t rest_nlog;
+  int th_id; // 書き込みスレッドの番号に対応したid
+  int log_fd; // logファイルへのFD
+  LogHeader header; // LogHeader
+  off_t base_addr; // LogHeaderの先頭アドレス
+  off_t log_ptr; // 現在読んでいるlogの部分のアドレス
+  uint32_t rest_nlog; // 残りのログの個数
 
-  Log logs[ALOGBUF_SIZE];
-  int idx;
-  int nlog; // LogBuffer内の個数
-
-
+  Log logs[ALOGBUF_SIZE]; // Analysis Log Buffer
+  int idx; // アナリシスログバッファで現在のログポインタ
+  int nlog; // LogBuffer内のログの個数
 
 
 public:
@@ -163,7 +162,6 @@ public:
     clear();
     log_fd = open(Logger::logpath, O_RDONLY | O_SYNC);
   }
-
 
   /* AnaLogBufferを使用する前に、ログ(スレッド)番号を与えて一度呼び出す */
   void 
@@ -191,68 +189,144 @@ public:
 
   int
   readLogs(){
-    nlog = ALOGBUF_SIZE<rest_nlog ? ALOGBUF_SIZE : rest_nlog;
+
+    nlog = (rest_nlog<ALOGBUF_SIZE)?rest_nlog:ALOGBUF_SIZE; //読み込むログの個数を決める
+    cout << "readLogs: " << nlog << endl;
     if(nlog == 0){
       return -1;
     }
-
+    
     clear();
     
+    lseek(log_fd, log_ptr, SEEK_SET);
     int ret = read(log_fd, logs, sizeof(Log)*nlog);
     if(-1 == ret){
       perror("read"); exit(1);
     }
+    log_ptr += ret;
     rest_nlog -= nlog;
+
+    cout << "rest: " << rest_nlog << endl;
+    cout << "nlog: " << nlog << endl;
+    return nlog;
   }
   
-  //Logを一つ取り出す
+  //Logを一つ取り出す(ポインタを先へ進める)
   Log
   next()
   {
     // Logの再読み込み
-    if(idx == ALOGBUF_SIZE || idx == nlog){ 
-      readLogs();
+    if(idx == nlog){ 
+      if(readLogs()==-1)
+	throw "read no log";
     }
 
-    return logs[idx++];
+    idx++;
+    return logs[idx-1];
   }
-  
-}
+
+  // 先頭のログを読む(ポインタは先へ進めない)
+  Log
+  front()
+  {
+    // Logの再読み込み
+    if(idx == nlog){ 
+      if(readLogs()==-1)
+	throw "read no log";
+    }
+    
+    return logs[idx];
+  }
+
+};
 
 
 static void
 parallel_analysis(){
-  int log_fd = open(Logger::logpath, O_CREAT | O_RDONLY);
-  if(log_fd == -1){
-    perror("open"); exit(1);
-  }
+  std::set<int> flags;  
+  AnaLogBuffer alogs[MAX_WORKER_THREAD];
 
-  Log log_set[MAX_WORKER_THREAD][1000]; 
-  LogHeader header_set[MAX_WORKER_THREAD];
-  off_t base[MAX_WORKER_THREAD];
-
+  
   for(int i=0;i<MAX_WORKER_THREAD;i++){
-    base[i] = i * LOG_OFFSET;
+    alogs[i].init(i);
+    flags.insert(i);
+  }
+  
+  int min_id;
+  Log min_log,tmp_log;
 
-    lseek(log_fd, base[i], SEEK_SET);
-    if( -1 == read(log_fd, &header, sizeof(LogHeader))){
-      perror("read"); exit(1);
+  std::set<int>::iterator it;
+  std::set<int> del_list;
+  while(1){
+    min_log.LSN = ~(uint32_t)0; // NOTのビット演算
+    for( it=flags.begin(); it!=flags.end(); it++){
+      try{
+	//	cout << *it << endl;
+	tmp_log = alogs[*it].front();
+	if(min_log.LSN > tmp_log.LSN){
+	  min_id = *it;
+	  min_log = tmp_log;
+	}	
+      }
+      catch(char const* e) {
+	del_list.insert(*it);
+	continue;
+      }
     }
 
-    read();
+    for( it=del_list.begin(); it!=del_list.end(); it++){
+      //      cout << "el: " << *it << endl;
+      flags.erase(flags.find(*it));
+    }
+    del_list.clear();
+
+    if(flags.empty()){
+      break;
+    }
+
+
+    // cout << "search log_file is: ";
+    // for( it=flags.begin(); it!=flags.end(); it++){
+    //   cout << *it ;
+    // }
+    // cout << endl;
+
+    
+    //　LSNが一番小さなログを処理する
+    alogs[min_id].next();
+    Log log = min_log;
+    
+    Logger::log_debug(log);
+    sleep(1);
+    if(log.Type == BEGIN){
+      Transaction trans;
+      trans.TransID = log.TransID;
+      trans.State=U;
+      trans.LastLSN=log.LSN;
+      trans.UndoNxtLSN=0;
+      
+      append_transaction(trans);
+    } 
+    else if(log.Type == UPDATE){
+      trans_table[log.TransID].LastLSN = log.LSN;
+    } 
+    else if(log.Type == COMPENSATION){
+      trans_table[log.TransID].LastLSN = log.LSN;
+      if(log.UndoNxtLSN == 0){ 
+	// BEGINログをCOMPENSATIONしたのでトランザクションテーブルから削除する
+	remove_transaction_xid(log.TransID); 
+      }
+    }
+    else if(log.Type == END){
+      remove_transaction_xid(log.TransID);
+    }
   }
-  
-  while(1){
-  }
-  
-  
-  
 }
 
 // Transactionテーブルをログから復元する
 static void 
 analysis(){
-
+  
 #ifndef FIO
   seqential_analysis();
 #else

@@ -15,8 +15,6 @@ using namespace std;
 #define MAX_QUEUE_SIZE 100000 + 1 
 //#define MAX_QUEUE_SIZE 100 + 1 
 /* processing thread の 最大数 */
-#define MAX_WORKER_THREAD 100
-
 
 /* 
    TransQueue:

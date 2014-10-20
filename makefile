@@ -27,10 +27,12 @@ aries_batch: $(objs)
 
 aries_fio: $(objs)
 	$(CC) $(CFLAGS) -DFIO -c logger.cpp 
+	$(CC) $(CFLAGS) -DFIO -c system.cpp
 	$(CC) $(CFLAGS) -c queue_mgr.cpp	
 	$(CC) $(CFLAGS) -o $(program)_fio.exe $(objs)
 
 aries_fio_batch: $(objs)
 	$(CC) $(CFLAGS) -DFIO -c logger.cpp 
+	$(CC) $(CFLAGS) -DFIO -c system.cpp
 	$(CC) $(CFLAGS) -c -DBATCH_TEST queue_mgr.cpp
 	$(CC) $(CFLAGS) -o $(program)_fio_batch.exe $(objs)

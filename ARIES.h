@@ -10,6 +10,7 @@
 #include <map>
 #include <cstring>
 #include <vector>
+#include <set>
 
 #define PAGE_N (4096*16)
 #define MAX_UPDATE 100
