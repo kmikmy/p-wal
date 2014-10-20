@@ -182,6 +182,11 @@ public:
   }
 
   void
+  term(){
+    close(log_fd);
+  }
+
+  void
   clear(){
     idx=0;
     memset(logs,0,sizeof(logs));
@@ -297,7 +302,7 @@ parallel_analysis(){
     Log log = min_log;
     
     Logger::log_debug(log);
-    sleep(1);
+    //    sleep(1);
     if(log.Type == BEGIN){
       Transaction trans;
       trans.TransID = log.TransID;
@@ -320,6 +325,10 @@ parallel_analysis(){
     else if(log.Type == END){
       remove_transaction_xid(log.TransID);
     }
+  }
+
+  for(int i=0;i<MAX_WORKER_THREAD;i++){
+    alogs[i].term();
   }
 }
 
