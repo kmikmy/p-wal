@@ -13,7 +13,6 @@ extern void each_operation_mode();
 
 extern MasterRecord master_record;
 extern TransTable trans_table;
-extern PageBufferEntry pageBuffers[PAGE_N];
 extern char *ARIES_HOME;
 
 static void fixed_thread_mode(int n, int nthread);
@@ -78,6 +77,10 @@ void interact_mode(){
   cout << "system_xid is " << ARIES_SYSTEM::master_record.system_xid << endl;
 
   Logger::init();
+
+  cout << "test" << endl;
+
+
 
   Mode  m;
   do {

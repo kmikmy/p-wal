@@ -17,12 +17,13 @@ extern TransTable trans_table;
 /* trans_tableを変更する際にはロックが必要 */
 extern std::mutex trans_table_mutex;
 
-extern PageBufferEntry page_table[PAGE_N];
+extern BufferControlBlock page_table[PAGE_N];
 extern map<uint32_t, uint32_t> dirty_page_table;
 extern char *ARIES_HOME;
 
 extern void remove_transaction_xid(uint32_t xid);
 extern void WAL_update(OP op, uint32_t xid, int page_id, int th_id);
+extern void page_fix(int page_id, int th_id);
 
 void begin_checkpoint();
 void begin(uint32_t xid, int th_id);
@@ -30,8 +31,6 @@ void end(uint32_t xid, int th_id);
 void rollback(uint32_t xid);
 
 
-static int page_fd;
-static std::mutex page_mtx;
 
 std::istream& 
 operator>>( std::istream& is, UP_OPTYPE& i )
@@ -78,7 +77,7 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
     op = ops[i];
     page_id = page_ids[i];
 
-    PageBufferEntry *pbuf = &(page_table[page_id]);
+    BufferControlBlock *pbuf = &(page_table[page_id]);
 
     /* 
        自スレッドが該当ページのロックを取得していないなら、グローバルロックテーブルにロックをかけて、
@@ -128,46 +127,14 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
 }
 
 void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
-  PageBufferEntry *pbuf = &page_table[page_id];
+  BufferControlBlock *pbuf = &page_table[page_id];
   // fixed flagがなければファイルから読み込んでfixする
 
 #ifdef DEBUG
-    debug("fixed?: " << pbuf->fixed_flag << endl);
+  debug("fixed_count: " << pbuf->fixed_count << endl);
 #endif
 
-  if(!pbuf->fixed_flag){
-    pbuf->fixed_flag = true;
-    pbuf->modified_flag = true;
-
-    std::lock_guard<std::mutex> lock(page_mtx);
-    std::string page_filename = ARIES_HOME;
-    page_filename += "/data/pages.dat";
-
-    if( page_fd == 0 ){
-      if( (page_fd = open(page_filename.c_str(), O_CREAT | O_RDONLY )) == -1){
-	perror("open");
-	exit(1);
-      }
-    }
-    lseek(page_fd, (off_t)sizeof(Page)*page_id, SEEK_SET);
-
-
-    //    Page p;
-    if( -1 == read(page_fd, &pbuf->page, sizeof(Page))){
-      perror("read"); exit(1);
-    } 
-    pbuf->page_id = page_id;
-
-    uint32_t rec_LSN = pbuf->page.page_LSN;
-
-    /* 
-       dirty_pages_tableのRecLSN更新
-       RecLSNはそのページの更新が確実に反映されているログのLSN。
-       リカバリ時にはそれ以降のLSNについてログからupdate内容を適用しなおさなければいけない。
-    */
-    dirty_page_table[pbuf->page_id] = rec_LSN;
-
-  }   
+  page_fix(page_id, th_id); // pageがBCBにfixされていなかったらfix。既にfixされている場合はfixed_countを+1する。
 
   Log log;
   //   LSNはログを書き込む直前に決定する
@@ -343,18 +310,3 @@ rollback(uint32_t xid){
 }
 
 
-void 
-flush_page(){
-
-  std::lock_guard<std::mutex> lock(page_mtx);  
-  
-  for(int i=0;i<PAGE_N;i++){
-    if(!page_table[i].fixed_flag)
-      continue;
-
-    lseek(page_fd,sizeof(Page)*page_table[i].page_id, SEEK_SET);
-    if( -1 == write(page_fd, &page_table[i].page, sizeof(Page))){
-      perror("write"); exit(1);
-    }
-  }    
-}

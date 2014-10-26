@@ -29,15 +29,17 @@ typedef struct {
   int value;  
 } Page;
 
-typedef struct PageBufferEntry{
+typedef struct {
   pthread_rwlock_t lock; // protect BufEntry
 
   uint32_t page_id;
-  bool fixed_flag;
+  bool readed_flag;
   bool modified_flag;
+  uint32_t fixed_count;
 
   Page page;
-} PageBufferEntry;
+} BufferControlBlock;
+
 
 typedef struct {
   uint32_t pageID;
@@ -101,7 +103,6 @@ typedef struct {
 class ARIES_SYSTEM {
 private:
   static int fd;
-  static int fd2;
 
 public: 
   static MasterRecord master_record;

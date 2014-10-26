@@ -20,14 +20,13 @@ Page pages[PAGE_N];
 MasterRecord ARIES_SYSTEM::master_record;
 
 extern TransTable trans_table;
-extern PageBufferEntry page_table[PAGE_N];
+extern BufferControlBlock page_table[PAGE_N];
 extern char* ARIES_HOME;
 
 static std::mutex mr_mtx;
 static int system_fd;
 
-extern bool is_page_fixed(int page_id);
-extern void page_fix(int page_id);
+extern void page_fix(int page_id, int th_id);
 extern void append_transaction(Transaction trans);
 extern void remove_transaction_xid(uint32_t xid);
 extern void rollback(uint32_t xid);
@@ -382,8 +381,8 @@ sequential_redo(){
     if (log.Type == UPDATE || log.Type == COMPENSATION){
       int idx=log.PageID;
       
-      if(!is_page_fixed(idx))
-	page_fix(idx);
+      // redoは並列に行わないのでページへのlockはいらない
+      page_fix(idx, 0);
       
       if(page_table[idx].page.page_LSN <= log.LSN){
 	page_table[idx].page.value = log.after;
@@ -525,7 +524,10 @@ uint32_t ARIES_SYSTEM::xid_inc(){
   // };
 
   return new_val;
+}
 
+uint32_t ARIES_SYSTEM::xid_read(){
+  return master_record.system_xid;
 }
 
 int ARIES_SYSTEM::abnormal_exit(){
