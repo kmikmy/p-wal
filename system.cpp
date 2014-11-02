@@ -21,6 +21,7 @@ MasterRecord ARIES_SYSTEM::master_record;
 
 extern TransTable trans_table;
 extern BufferControlBlock page_table[PAGE_N];
+extern map<uint32_t, uint32_t> dirty_page_table;
 extern char* ARIES_HOME;
 
 static std::mutex mr_mtx;
@@ -35,7 +36,7 @@ extern void rollback(uint32_t xid);
 static void load_master_record();
 static void pbuf_lock_init();
 static void recovery();
-static void analysis();
+static uint32_t analysis();
 static void redo();
 static void undo();
 static void page_undo_write(unsigned n);
@@ -86,13 +87,28 @@ load_master_record(){
 }
 
 static void recovery(){
-  analysis();
+  
+  uint32_t redo_lsn = analysis();
   redo();
   undo();
 }
 
+static uint32_t
+min_recLSN(){
+  map<uint32_t, uint32_t>::iterator it = dirty_page_table.begin();
+  if(it == dirty_page_table.end()){
+    return 0;
+  }
+  
+  uint32_t min_LSN = it->second;
 
-static void
+  for(; it!=dirty_page_table.end(); it++){
+    if(min_LSN > it->second) min_LSN = it->second;
+  }
+  return min_LSN;
+}
+
+static uint32_t
 sequential_analysis(){ 
   int log_fd = open(Logger::logpath, O_CREAT | O_RDONLY);
   if(log_fd == -1){
@@ -124,22 +140,33 @@ sequential_analysis(){
       
       append_transaction(trans);
     } 
-    else if(log.Type == UPDATE){
+    else if(log.Type == UPDATE || log.Type == COMPENSATION){
       trans_table[log.TransID].LastLSN = log.LSN;
-    } 
-    else if(log.Type == COMPENSATION){
-      trans_table[log.TransID].LastLSN = log.LSN;
-      if(log.UndoNxtLSN == 0){ 
-	// BEGINログをCOMPENSATIONしたのでトランザクションテーブルから削除する
-	remove_transaction_xid(log.TransID); 
-      }
-    }
+
+      if(log.Type == UPDATE){
+	// if(log is undoable)
+	trans_table[log.TransID].UndoNxtLSN = log.LSN;
+      } 
+      else { // log.Type == COMPENSATION
+	trans_table[log.TransID].UndoNxtLSN = log.UndoNxtLSN;
+      
+	if(log.UndoNxtLSN == 0){ 
+	  // BEGINログをCOMPENSATIONしたのでトランザクションテーブルから削除する
+	  remove_transaction_xid(log.TransID); 
+	}
+
+	if(dirty_page_table.find(log.PageID) == dirty_page_table.end()){
+	  dirty_page_table[log.PageID] = log.LSN;
+	}
+      } 
+    } // if(log.Type == UPDATE || log.Type == COMPENSATION){
     else if(log.Type == END){
       remove_transaction_xid(log.TransID);
     }
   }
-
   close(log_fd);
+
+  return min_recLSN();
 }
 
 
@@ -248,12 +275,11 @@ public:
 };
 
 
-static void
+static uint32_t
 parallel_analysis(){
   std::set<int> flags;  
   AnaLogBuffer alogs[MAX_WORKER_THREAD];
 
-  
   for(int i=0;i<MAX_WORKER_THREAD;i++){
     alogs[i].init(i);
     flags.insert(i);
@@ -332,19 +358,26 @@ parallel_analysis(){
   for(int i=0;i<MAX_WORKER_THREAD;i++){
     alogs[i].term();
   }
+
+  return 0;
 }
 
 // Transactionテーブルをログから復元する
-static void 
+static uint32_t
 analysis(){
+  uint32_t redo_lsn;
 #ifndef FIO
-  sequential_analysis();
+  redo_lsn = sequential_analysis();
 #else
-  parallel_analysis();
+  redo_lsn = parallel_analysis();
 #endif 
 
   ARIES_SYSTEM::transtable_debug();
+  cout << redo_lsn << endl;
+
   sleep(10);
+
+  return redo_lsn;
 }
 
 
