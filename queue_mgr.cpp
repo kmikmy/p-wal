@@ -85,7 +85,7 @@ extern uint32_t construct_transaction(Transaction *trans);
 extern void start_transaction(uint32_t xid, int th_id);
 extern void  append_transaction(Transaction trans);
 
-TransQueue trans_queues[MAX_WORKER_THREAD]; 
+TransQueue *dist_trans_queues;
 
 /* 
    rest_flagがtrueならまだタスクが生成される可能性がある。
@@ -94,6 +94,10 @@ TransQueue trans_queues[MAX_WORKER_THREAD];
 */
 static bool rest_flag; 
 
+static void
+create_dist_trans_queues(int th_num){
+  dist_trans_queues = (TransQueue *)calloc(th_num, sizeof(TransQueue));
+}
 
 /* 
    trans_queuesにトランザクションをまとめて詰め込む。
@@ -117,13 +121,13 @@ trans_queues_init(uint32_t ntrans, uint32_t nqueue){
 
   for(uint32_t i=0;i<n_each_queue;i++){
     for(uint32_t j=0;j<nqueue;j++){
-      trans_queues[j].push(trans);
+      dist_trans_queues[j].push(trans);
       trans.TransID++;
     }
   }
 
   for(uint32_t j=0;j<reminder;j++){
-    trans_queues[j].push(trans);
+    dist_trans_queues[j].push(trans);
     trans.TransID++;
   }
 
@@ -157,13 +161,13 @@ manage_queue_thread(void *_args){
   //  sched_setaffinity(0, sizeof(mask), &mask);
 
   while(cnt > 0){
-    trans_queues[0].lock(); // critical section start
+    dist_trans_queues[0].lock(); // critical section start
 
     // 一度ロックを取ったらtrans_queueが一杯になるまでトランザクションをキューにプッシュする
-    while(!trans_queues[0].full() && cnt > 0){ 
+    while(!dist_trans_queues[0].full() && cnt > 0){ 
       Transaction trans;
       construct_transaction(&trans);
-      trans_queues[0].push(trans);
+      dist_trans_queues[0].push(trans);
 
       cnt--;
 
@@ -172,11 +176,11 @@ manage_queue_thread(void *_args){
 #endif
     }
 
-    if(trans_queues[0].full()){ 
+    if(dist_trans_queues[0].full()){ 
       //      cout << "trans_queue is full" << endl;
     }
 
-    trans_queues[0].unlock(); // critical section end
+    dist_trans_queues[0].unlock(); // critical section end
     //      usleep(1000);
   }
   rest_flag = false; // process_queue_threadに終了を通知する 
@@ -208,20 +212,20 @@ process_queue_thread(void *_th_id){
 #endif
 
   /* queueにタスクがある or これからまだタスクが追加される　間はループ */
-  while(!trans_queues[queue_id].empty() || rest_flag){
+  while(!dist_trans_queues[queue_id].empty() || rest_flag){
     /* この間にqueueが空になる可能性がある */
-    trans_queues[queue_id].lock();    /* critical section start*/
+    dist_trans_queues[queue_id].lock();    /* critical section start*/
 
-    if(trans_queues[queue_id].empty()){ // emptyなら少し待って再度上のwhileへ
-      trans_queues[queue_id].unlock(); /* critical section end */ 
+    if(dist_trans_queues[queue_id].empty()){ // emptyなら少し待って再度上のwhileへ
+      dist_trans_queues[queue_id].unlock(); /* critical section end */ 
       //      usleep(10);
       continue;
     }
 
-    trans = trans_queues[queue_id].front();
-    trans_queues[queue_id].pop();
+    trans = dist_trans_queues[queue_id].front();
+    dist_trans_queues[queue_id].pop();
 
-    trans_queues[queue_id].unlock(); /* critical section end */ 
+    dist_trans_queues[queue_id].unlock(); /* critical section end */ 
     
     append_transaction(trans);
     // transactionの開始
@@ -242,6 +246,8 @@ pthread_t
 gen_producer_thread(int _ntrans, int _nqueue){
     pthread_t th;
     rest_flag = true;
+
+    create_dist_trans_queues(_nqueue);
 
 #ifdef BATCH_TEST
     trans_queues_init(_ntrans, _nqueue);
