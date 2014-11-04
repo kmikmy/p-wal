@@ -71,9 +71,15 @@ typedef struct {
 
 
 /*
-  TransTableはただのmap
+  TransTableはただのmap。スレッドセーフではないのでリカバリ時にのみ使用する。
 */
 typedef std::map<uint32_t, Transaction> TransTable;
+
+
+/*
+  DistributedTransTableは、ワーカースレッドの数だけ動的に生成される
+ */
+typedef Transaction DistributedTransTable;
 
 typedef struct {
   uint32_t LSN;
@@ -107,7 +113,7 @@ private:
 public: 
   static MasterRecord master_record;
 
-  static void db_init();
+  static void db_init(int th_num);
   static uint32_t xid_inc();
   static uint32_t xid_read();
 

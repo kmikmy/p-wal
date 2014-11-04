@@ -51,10 +51,11 @@ int main(int argc, char *argv[]){
 
 static void 
 fixed_thread_mode(int n,int nthread){
-  ARIES_SYSTEM::db_init();
+  ARIES_SYSTEM::db_init(nthread);
   /*
     gen_producer_thread()とgen_worker_thread()の呼び出し順は固定。
     gen_worker_thread()の中でworkerスレッドに対するpthread_join()が呼び出されているため。
+    gen_producer_thread()の中で、トランザクションキューが生成される
   */
   pthread_t th = gen_producer_thread(n, nthread);
   gen_worker_thread(nthread);
@@ -67,7 +68,7 @@ fixed_thread_mode(int n,int nthread){
 static
 void interact_mode(){
 
-  ARIES_SYSTEM::db_init();
+  ARIES_SYSTEM::db_init(1);
 
 #ifdef DEBUG
   cout << "DB CONNECTTED" << endl;
@@ -77,10 +78,6 @@ void interact_mode(){
   cout << "system_xid is " << ARIES_SYSTEM::master_record.system_xid << endl;
 
   Logger::init();
-
-  cout << "test" << endl;
-
-
 
   Mode  m;
   do {

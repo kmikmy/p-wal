@@ -1,6 +1,6 @@
 # Makefile
 program = aries
-objs = main.o transaction.o system.o logger.o update.o global.o buffer.o queue_mgr.o
+objs = main.o transaction.o system.o logger.o update.o global.o buffer.o queue_mgr.o recovery.o
 CC = g++
 CFLAGS = -g -Wall -O2 -std=c++0x -lpthread -lprofiler
 
@@ -28,11 +28,13 @@ aries_batch: $(objs)
 aries_fio: $(objs)
 	$(CC) $(CFLAGS) -DFIO -c logger.cpp 
 	$(CC) $(CFLAGS) -DFIO -c system.cpp
+	$(CC) $(CFLAGS) -DFIO -c recovery.cpp
 	$(CC) $(CFLAGS) -c queue_mgr.cpp	
 	$(CC) $(CFLAGS) -o $(program)_fio.exe $(objs)
 
 aries_fio_batch: $(objs)
 	$(CC) $(CFLAGS) -DFIO -c logger.cpp 
 	$(CC) $(CFLAGS) -DFIO -c system.cpp
+	$(CC) $(CFLAGS) -DFIO -c recovery.cpp
 	$(CC) $(CFLAGS) -c -DBATCH_TEST queue_mgr.cpp
 	$(CC) $(CFLAGS) -o $(program)_fio_batch.exe $(objs)

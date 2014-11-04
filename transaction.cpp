@@ -15,7 +15,12 @@
 using namespace std;
 enum T_Mode { COMMIT_M, UPDATE_M, ROLLBACK_M, FLUSH_M, SHOWDP_M };
 
+
+// recovery processing 用
 TransTable trans_table;
+
+// normal processing 用
+DistributedTransTable *dist_trans_table;
 
 extern map<uint32_t, uint32_t> dirty_page_table;
 
@@ -25,7 +30,6 @@ extern int update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int upda
 extern void begin(uint32_t,int);
 extern void end(uint32_t,int);
 extern void WAL_update(OP op, uint32_t xid, int page_id, int th_id);
-static void flush_page();
 
 
 std::istream& 

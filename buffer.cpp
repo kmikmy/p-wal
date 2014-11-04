@@ -57,6 +57,12 @@ page_fix(int page_id, int th_id){
   }
 }
 
+
+/* 
+fixされていなくて、modifiedフラグが立っているページのみflushする。
+flushされたページはmodifiedフラグが外される。
+
+*/
 void 
 flush_page(){
   std::lock_guard<std::mutex> lock(page_mtx);  
