@@ -90,14 +90,21 @@ typedef struct {
   uint32_t PageID;
   int before;
   int after;
-  OP op; // 8バイト
-  char padding[24];
-} Log; // 64バイト
+  OP op; // 8 bytes
+  /* ここまでで40 bytes */
+
+  uint64_t file_offset;
+  /* ここまでで48 bytes */ 
+  
+  
+  char padding[464];
+} Log; /* 512バイト */
 
 
 typedef struct{
   uint64_t count;
-} LogHeader;
+  char padding[504];
+} LogHeader; /**/
 
 typedef struct {
   uint32_t mr_chkp;
