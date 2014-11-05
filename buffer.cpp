@@ -10,6 +10,29 @@ static int page_fd[MAX_WORKER_THREAD];
 static int page_fd_for_flush;
 static std::mutex page_mtx;
 
+void 
+pbuf_init(){
+  int page_fd;
+  std::string page_filename = ARIES_HOME;
+  page_filename += "/data/pages.dat";
+    
+  if( (page_fd = open(page_filename.c_str(), O_CREAT | O_RDONLY )) == -1){
+    perror("open");
+    exit(1);
+  }
+
+  for(int i=0;i<PAGE_N;i++){
+    pthread_rwlock_init(&page_table[i].lock, NULL);
+    page_table[i].page_id=i;
+    page_table[i].fixed_count = 0;
+    if(-1 == read(page_fd, &page_table[i].page, sizeof(Page))){
+      perror("read");
+      exit(1);
+    }
+    page_table[i].readed_flag=true;
+    page_table[i].modified_flag=false;
+  }
+}
 
 bool
 is_page_fixed(int page_id){

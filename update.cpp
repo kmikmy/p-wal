@@ -13,10 +13,6 @@ enum UP_OPTYPE { _EXIT, _INC, _DEC, _SUBST, _SYSTEM_FAILURE };
 
 const uint32_t Delta = 500; // Delta(ms)でロックが獲得できない場合はrollbackする。
 
-extern TransTable trans_table;
-/* trans_tableを変更する際にはロックが必要 */
-extern std::mutex trans_table_mutex;
-
 extern DistributedTransTable *dist_trans_table;
 
 
@@ -24,7 +20,6 @@ extern BufferControlBlock page_table[PAGE_N];
 extern map<uint32_t, uint32_t> dirty_page_table;
 extern char *ARIES_HOME;
 
-extern void remove_transaction_xid(uint32_t xid);
 extern void WAL_update(OP op, uint32_t xid, int page_id, int th_id);
 extern void page_fix(int page_id, int th_id);
 
@@ -103,7 +98,6 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
 	if( ((t.tv_sec - s.tv_sec)*1000 + (t.tv_usec - s.tv_usec)/1000 ) > Delta ){
 	  cout << "-" ;
 	  rollback(xid, th_id);
-	  remove_transaction_xid(xid);
 
 	  lock_release(my_lock_table);
 	  return -1;

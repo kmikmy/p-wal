@@ -83,7 +83,8 @@ typedef struct _ProArg{
 
 extern uint32_t construct_transaction(Transaction *trans);
 extern void start_transaction(uint32_t xid, int th_id);
-extern void  append_transaction(Transaction trans);
+extern void  append_transaction(Transaction trans, int th_id);
+extern void clear_transaction(int th_id);
 
 TransQueue *dist_trans_queues;
 
@@ -227,9 +228,10 @@ process_queue_thread(void *_th_id){
 
     dist_trans_queues[queue_id].unlock(); /* critical section end */ 
     
-    append_transaction(trans);
+    append_transaction(trans, th_id);
     // transactionの開始
     start_transaction(trans.TransID, th_id);
+    clear_transaction(th_id);
 
   }
   return NULL;

@@ -17,7 +17,7 @@ using namespace std;
 
 MasterRecord ARIES_SYSTEM::master_record;
 
-extern TransTable trans_table;
+extern TransTable recovery_trans_table;
 extern DistributedTransTable *dist_trans_table;
 
 extern BufferControlBlock page_table[PAGE_N];
@@ -27,8 +27,8 @@ extern char* ARIES_HOME;
 static std::mutex mr_mtx;
 static int system_fd;
 
-extern  void recovery();
-
+extern void recovery();
+extern void pbuf_init();
 
 static void
 create_dist_trans_table(int th_num)
@@ -36,34 +36,8 @@ create_dist_trans_table(int th_num)
   dist_trans_table = (DistributedTransTable *)calloc(th_num, sizeof(DistributedTransTable));
 }
 
-
-static void 
-pbuf_init(){
-  int page_fd;
-  std::string page_filename = ARIES_HOME;
-  page_filename += "/data/pages.dat";
-    
-  if( (page_fd = open(page_filename.c_str(), O_CREAT | O_RDONLY )) == -1){
-    perror("open");
-    exit(1);
-  }
-
-  for(int i=0;i<PAGE_N;i++){
-    pthread_rwlock_init(&page_table[i].lock, NULL);
-    page_table[i].page_id=i;
-    page_table[i].fixed_count = 0;
-    if(-1 == read(page_fd, &page_table[i].page, sizeof(Page))){
-      perror("read");
-      exit(1);
-    }
-    page_table[i].readed_flag=true;
-    page_table[i].modified_flag=false;
-  }
-}
-
 static void
 load_master_record(){
-  trans_table.clear();
   std::string mr_filename = ARIES_HOME;
   mr_filename += "/data/system.dat";
 
@@ -79,6 +53,7 @@ load_master_record(){
   
   if(ARIES_SYSTEM::master_record.last_exit == false ) {
     cout << "[recovery start]" << endl;
+    recovery_trans_table.clear();
     recovery();
   }
 
@@ -158,7 +133,7 @@ ARIES_SYSTEM::normal_exit()
 void ARIES_SYSTEM::transtable_debug(){
   cout << "++++++++++++++++transaction table++++++++++++++++++" << endl;
   map<uint32_t, Transaction>::iterator it;
-  for(it=trans_table.begin(); it!=trans_table.end(); it++){
+  for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end(); it++){
     Transaction trans = it->second;
     cout << "+ [" << trans.TransID << "] " << "State=" << trans.State << ", LastLSN=" << trans.LastLSN << ", UndoNxtLSN=" << trans.UndoNxtLSN << endl;
   }

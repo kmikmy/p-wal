@@ -9,15 +9,32 @@
 
 using namespace std;
 
-extern TransTable trans_table;
+// recovery processing 用 トランザクションテーブル
+TransTable recovery_trans_table;
+
 extern map<uint32_t, uint32_t> dirty_page_table;
 extern BufferControlBlock page_table[PAGE_N];
 extern char* ARIES_HOME;
 
 extern void page_fix(int page_id, int th_id);
-extern void append_transaction(Transaction trans);
-extern void remove_transaction_xid(uint32_t xid);
 extern void rollback(uint32_t xid);
+
+void 
+remove_transaction_xid(uint32_t xid){
+  // 現状、recoverは逐次で行うため衝突が発生しないのでコメントアウト
+  //  std::lock_guard<std::mutex> lock(trans_table_mutex); 
+  recovery_trans_table.erase(recovery_trans_table.find(xid));
+}
+
+static void
+show_transaction_table(){
+  map<uint32_t,Transaction>::iterator it;
+  
+  for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end(); ++it){
+    std::cout << it->first << std::endl;
+  }
+}
+
 
 static uint32_t
 min_recLSN(){
@@ -64,17 +81,17 @@ sequential_analysis(){
       trans.LastLSN=log.LSN;
       trans.UndoNxtLSN=0;
       
-      append_transaction(trans);
+      recovery_trans_table[trans.TransID] = trans;
     } 
     else if(log.Type == UPDATE || log.Type == COMPENSATION){
-      trans_table[log.TransID].LastLSN = log.LSN;
+      recovery_trans_table[log.TransID].LastLSN = log.LSN;
 
       if(log.Type == UPDATE){
 	// if(log is undoable)
-	trans_table[log.TransID].UndoNxtLSN = log.LSN;
+	recovery_trans_table[log.TransID].UndoNxtLSN = log.LSN;
       } 
       else { // log.Type == COMPENSATION
-	trans_table[log.TransID].UndoNxtLSN = log.UndoNxtLSN;
+	recovery_trans_table[log.TransID].UndoNxtLSN = log.UndoNxtLSN;
       
 	if(log.UndoNxtLSN == 0){ 
 	  // BEGINログをCOMPENSATIONしたのでトランザクションテーブルから削除する
@@ -264,13 +281,13 @@ parallel_analysis(){
       trans.LastLSN=log.LSN;
       trans.UndoNxtLSN=0;
       
-      append_transaction(trans);
+      recovery_trans_table[trans.TransID]=trans;
     } 
     else if(log.Type == UPDATE){
-      trans_table[log.TransID].LastLSN = log.LSN;
+      recovery_trans_table[log.TransID].LastLSN = log.LSN;
     } 
     else if(log.Type == COMPENSATION){
-      trans_table[log.TransID].LastLSN = log.LSN;
+      recovery_trans_table[log.TransID].LastLSN = log.LSN;
       if(log.UndoNxtLSN == 0){ 
 	// BEGINログをCOMPENSATIONしたのでトランザクションテーブルから削除する
 	remove_transaction_xid(log.TransID); 
@@ -414,7 +431,7 @@ rollback_for_recovery(uint32_t xid){
     perror("open"); exit(1);
   }
   
-  uint32_t lsn = trans_table.at(xid).LastLSN; // rollbackするトランザクションの最後のLSN
+  uint32_t lsn = recovery_trans_table.at(xid).LastLSN; // rollbackするトランザクションの最後のLSN
 
   Log log;
   while(lsn != 0){ // lsnが0になるのはprevLSNが0のBEGINログを処理した後
@@ -449,13 +466,13 @@ rollback_for_recovery(uint32_t xid){
       clog.UndoNxtLSN = log.PrevLSN;
       // clog.before isn't needed because compensation log record is redo-only.
       clog.after = log.before;
-      clog.PrevLSN = trans_table.at(xid).LastLSN;
+      clog.PrevLSN = recovery_trans_table.at(xid).LastLSN;
 
 
       // compensation log recordをどこに書くかという問題はひとまず置いておく
       // とりあえず全部id=0のログブロックに書く
       ret = Logger::log_write(&clog, 0); 
-      trans_table[xid].LastLSN = clog.LSN;
+      recovery_trans_table[xid].LastLSN = clog.LSN;
 
 #ifdef DEBUG
       Logger::log_debug(clog);
@@ -473,11 +490,11 @@ rollback_for_recovery(uint32_t xid){
       clog.TransID = log.TransID;
       // clog.before isn't needed because compensation log record is redo-only.
       clog.UndoNxtLSN = log.PrevLSN;
-      clog.PrevLSN = trans_table.at(xid).LastLSN;
+      clog.PrevLSN = recovery_trans_table.at(xid).LastLSN;
 
       Logger::log_write(&clog, 0);
       // compensation logはcompensateされないのでtransaction tableに記録する必要はない
-      trans_table[xid].LastLSN = clog.LSN;
+      recovery_trans_table[xid].LastLSN = clog.LSN;
 #ifdef DEBUG
       Logger::log_debug(clog);
 #endif
@@ -503,11 +520,11 @@ undo(){
   }
 
   map<uint32_t, Transaction>::iterator it;
-  for(it=trans_table.begin(); it!=trans_table.end();it++){
+  for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end();it++){
     rollback_for_recovery(it->second.TransID);    
   }
 
-  trans_table.clear();
+  recovery_trans_table.clear();
 
   //  page_undo_write(PAGE_N);
 
