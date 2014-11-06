@@ -93,7 +93,7 @@ typedef struct {
   OP op; // 8 bytes
   /* ここまでで40 bytes */
 
-  uint64_t file_offset;
+  uint64_t offset;
   /* ここまでで48 bytes */ 
   
   

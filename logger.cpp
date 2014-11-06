@@ -1,5 +1,6 @@
 #include "ARIES.h"
 #include <iostream>
+#include <utility>
 
 using namespace std;
 
@@ -19,6 +20,8 @@ const char* Logger::logpath = "/dev/fioa";
 //const char* Logger::logpath = "/dev/shm/kamiya/log.dat";
 static uint32_t global_lsn;
 #endif
+
+typedef pair<off_t, off_t> LSN_and_Offset;
 
 /* 
    LogBuffer:
@@ -122,27 +125,26 @@ class LogBuffer{
     //    std::cout << "idx: " << idx << std::endl;
   }
 
-  off_t next_lsn(){
-#ifndef FIO
+  LSN_and_Offset next_lsn(){
+    LSN_and_Offset ret;
     off_t pos;
     
-    lseek(log_fd, base_addr, SEEK_SET);
-    
-    pos = sizeof(LogHeader) + (header.count + size()) * sizeof(Log);
-    return pos;
+    pos = base_addr + sizeof(LogHeader) + (header.count + size()) * sizeof(Log);
+    ret.second = pos;
 
+#ifndef FIO
+    ret.first = pos;
 #else
-
     int old, new_val;
     do {
       old = global_lsn;
       new_val = old+1;
     }while(!CAS(&global_lsn, old, new_val));
-  
-    return new_val;
-
+    
+    ret.first = new_val;
 #endif    
 
+    return ret;
   }
   
 };
@@ -190,7 +192,12 @@ Logger::log_write(Log *log, int th_id){
 #endif
   std::lock_guard<std::mutex> lock(logBuffer[th_id].log_mtx);  
 
-  log->LSN = logBuffer[th_id].next_lsn();
+  LSN_and_Offset lao;
+
+  lao = logBuffer[th_id].next_lsn();
+  log->LSN = lao.first;
+  log->offset = lao.second;
+
   logBuffer[th_id].push(*log);
 
   if( (log->Type == END && logBuffer[th_id].num_commit == NUM_GROUP_COMMIT ) || logBuffer[th_id].full() ){
