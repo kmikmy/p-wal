@@ -1,6 +1,6 @@
 # Makefile
 program = aries
-objs = main.o transaction.o system.o logger.o update.o global.o buffer.o queue_mgr.o recovery.o
+objs = main.o transaction.o system.o logger.o update.o global.o buffer.o queue_mgr.o recovery.o dpt.o
 CC = g++
 CFLAGS = -g -Wall -O2 -std=c++0x -lpthread -lprofiler
 

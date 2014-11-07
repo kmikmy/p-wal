@@ -1,4 +1,5 @@
 #include "ARIES.h"
+#include "dpt.h"
 #include <mutex>
 #include <cstdlib>
 #include <sys/types.h>
@@ -12,7 +13,7 @@ using namespace std;
 // recovery processing 用 トランザクションテーブル
 TransTable recovery_trans_table;
 
-extern map<uint32_t, uint32_t> dirty_page_table;
+extern DirtyPageTable dirty_page_table;
 extern BufferControlBlock page_table[PAGE_N];
 extern char* ARIES_HOME;
 
@@ -38,15 +39,15 @@ show_transaction_table(){
 
 static uint32_t
 min_recLSN(){
-  map<uint32_t, uint32_t>::iterator it = dirty_page_table.begin();
+  DirtyPageTable::iterator it = dirty_page_table.begin();
   if(it == dirty_page_table.end()){
     return 0;
   }
   
-  uint32_t min_LSN = it->second;
+  uint32_t min_LSN = (*it).rec_LSN;
 
   for(; it!=dirty_page_table.end(); it++){
-    if(min_LSN > it->second) min_LSN = it->second;
+    if(min_LSN > (*it).rec_LSN) min_LSN = (*it).rec_LSN;
   }
   return min_LSN;
 }
@@ -98,8 +99,8 @@ sequential_analysis(){
 	  remove_transaction_xid(log.TransID); 
 	}
 
-	if(dirty_page_table.find(log.PageID) == dirty_page_table.end()){
-	  dirty_page_table[log.PageID] = log.LSN;
+	if(!dirty_page_table.contains(log.PageID)){ // まだdirty_page_tableにエントリがない
+	  dirty_page_table.add(log.PageID,log.LSN);
 	}
       } 
     } // if(log.Type == UPDATE || log.Type == COMPENSATION){

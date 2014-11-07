@@ -18,8 +18,8 @@ const char* Logger::logpath = "/work/kamiya/log.dat";
 #else
 const char* Logger::logpath = "/dev/fioa";
 //const char* Logger::logpath = "/dev/shm/kamiya/log.dat";
-static uint32_t global_lsn;
 #endif
+static uint32_t global_lsn;
 
 typedef pair<off_t, off_t> LSN_and_Offset;
 
@@ -134,6 +134,7 @@ class LogBuffer{
 
 #ifndef FIO
     ret.first = pos;
+    global_lsn = pos;
 #else
     int old, new_val;
     do {
@@ -212,6 +213,11 @@ Logger::log_all_flush(){
   for(int i=0;i<MAX_WORKER_THREAD;i++)
     if(!logBuffer[i].empty())
       logBuffer[i].flush();
+}
+
+uint32_t
+Logger::read_LSN(){
+  return global_lsn;
 }
 
 void 

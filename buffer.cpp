@@ -1,9 +1,10 @@
 #include "ARIES.h"
+#include "dpt.h"
 
 using namespace std;
 
 extern char* ARIES_HOME;
-extern map<uint32_t, uint32_t> dirty_page_table;
+extern DirtyPageTable dirty_page_table;
 
 BufferControlBlock page_table[PAGE_N];
 static int page_fd[MAX_WORKER_THREAD];
@@ -66,14 +67,15 @@ page_fix(int page_id, int th_id){
       } 
       pbuf->page_id = page_id;
     }
-    pbuf->fixed_count=1;
+
 
     /* 
        dirty_pages_tableのRecLSN更新
        RecLSN以降にそのページに、Diskに更新が反映されていないUPDATEログがある可能性がある。
        リカバリ時、このページは少なくともRecLSNからredoをしなければない。
     */
-    dirty_page_table[pbuf->page_id] = ARIES_SYSTEM::xid_read();
+    dirty_page_table.add(pbuf->page_id,Logger::read_LSN());
+    pbuf->fixed_count=1;
   }
   else{ // 既にfixされているなら
     pbuf->fixed_count++;

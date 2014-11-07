@@ -21,7 +21,6 @@ extern TransTable recovery_trans_table;
 extern DistributedTransTable *dist_trans_table;
 
 extern BufferControlBlock page_table[PAGE_N];
-extern map<uint32_t, uint32_t> dirty_page_table;
 extern char* ARIES_HOME;
 
 static std::mutex mr_mtx;

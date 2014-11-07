@@ -1,4 +1,5 @@
 #include "ARIES.h"
+#include "dpt.h"
 #include <iostream>
 #include <cstdlib>
 #include <pthread.h>
@@ -18,7 +19,7 @@ enum T_Mode { COMMIT_M, UPDATE_M, ROLLBACK_M, FLUSH_M, SHOWDP_M };
 // normal processing 用
 DistributedTransTable *dist_trans_table;
 
-extern map<uint32_t, uint32_t> dirty_page_table;
+extern DirtyPageTable dirty_page_table;
 
 extern void operation_select(OP *op);
 extern void page_select(uint32_t *page_id);
@@ -40,9 +41,9 @@ operator>>( std::istream& is, T_Mode& i )
 static void 
 show_dp(){
   cout << endl << " *** show Dirty Page ***" << endl;
-  map<uint32_t, uint32_t>::iterator it;
-  for(it=dirty_page_table.begin(); it!=dirty_page_table.end(); it++){
-    cout << " * " << it->first << ": " << it->second << endl;
+
+  for(  DirtyPageTable::iterator it=dirty_page_table.begin(); it!=dirty_page_table.end(); it++){
+    cout << " * " << (*it).page_id << ": " << (*it).rec_LSN << endl;
   }
   cout << "***********************" << endl;
 }

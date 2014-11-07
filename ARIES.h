@@ -40,21 +40,6 @@ typedef struct {
   Page page;
 } BufferControlBlock;
 
-
-typedef struct {
-  uint32_t pageID;
-  uint32_t recLSN;
-} DP_Entry;
-
-typedef struct {
-  uint32_t body_length;
-} DP_Table_Head;
-
-typedef struct {
-  DP_Table_Head dp_h;
-  DP_Entry* dp_entry;  
-} DP_Table;
-
 typedef struct {
   OP_TYPE op_type;
   int amount;
@@ -142,6 +127,7 @@ class Logger
   static void log_all_flush();
   static void log_debug(Log log);
   static void init();
+  static uint32_t read_LSN();
 };
 
 #endif //  _ARIES

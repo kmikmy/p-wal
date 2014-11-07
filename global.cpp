@@ -1,6 +1,7 @@
 #include "ARIES.h"
+#include "dpt.h"
 #include <map>
 
-std::map<uint32_t, uint32_t> dirty_page_table;
+DirtyPageTable dirty_page_table(PAGE_N);
 char *ARIES_HOME;
 
