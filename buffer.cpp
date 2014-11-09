@@ -84,8 +84,9 @@ page_fix(int page_id, int th_id){
 
 
 /* 
-fixされていなくて、modifiedフラグが立っているページのみflushする。
-flushされたページはmodifiedフラグが外される。
+   fixされていなくて、modifiedフラグが立っているページのみflushする。
+   flushされたページはmodifiedフラグが外される。
+   未実装.
 
 */
 void 

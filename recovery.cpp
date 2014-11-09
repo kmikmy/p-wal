@@ -79,17 +79,17 @@ sequential_analysis(){
       Transaction trans;
       trans.TransID = log.TransID;
       trans.State=U;
-      trans.LastLSN=log.LSN;
+      trans.LastLSN=log.offset;
       trans.UndoNxtLSN=0;
       
       recovery_trans_table[trans.TransID] = trans;
     } 
     else if(log.Type == UPDATE || log.Type == COMPENSATION){
-      recovery_trans_table[log.TransID].LastLSN = log.LSN;
+      recovery_trans_table[log.TransID].LastLSN = log.offset;
 
       if(log.Type == UPDATE){
 	// if(log is undoable)
-	recovery_trans_table[log.TransID].UndoNxtLSN = log.LSN;
+	recovery_trans_table[log.TransID].UndoNxtLSN = log.offset;
       } 
       else { // log.Type == COMPENSATION
 	recovery_trans_table[log.TransID].UndoNxtLSN = log.UndoNxtLSN;
@@ -279,7 +279,7 @@ parallel_analysis(){
       Transaction trans;
       trans.TransID = log.TransID;
       trans.State=U;
-      trans.LastLSN=log.LSN;
+      trans.LastLSN=log.offset;
       trans.UndoNxtLSN=0;
       
       recovery_trans_table[trans.TransID]=trans;
@@ -456,7 +456,11 @@ rollback_for_recovery(uint32_t xid){
       int idx=log.PageID;
       
       page_table[idx].page.value = log.before;
-      page_table[idx].page.page_LSN = log.PrevLSN; 
+      // 前のログレコードのLSNをページバッファに適用する
+      Log tmp;
+      lseek(log_fd, log.PrevLSN, SEEK_SET);
+      if(read(log_fd, &tmp, sizeof(Log)) == -1) perror("read: log through PrevLSN");
+      page_table[idx].page.page_LSN = tmp.LSN; 
 
       Log clog;
       memset(&clog,0,sizeof(Log));
@@ -473,7 +477,7 @@ rollback_for_recovery(uint32_t xid){
       // compensation log recordをどこに書くかという問題はひとまず置いておく
       // とりあえず全部id=0のログブロックに書く
       ret = Logger::log_write(&clog, 0); 
-      recovery_trans_table[xid].LastLSN = clog.LSN;
+      recovery_trans_table[xid].LastLSN = clog.offset;
 
 #ifdef DEBUG
       Logger::log_debug(clog);
@@ -485,6 +489,7 @@ rollback_for_recovery(uint32_t xid){
       continue;
     }
     else if(log.Type == BEGIN){
+      /* BEGIN のCOMPENSATEは END にするべき(未実装) */
       Log clog;
       memset(&clog,0,sizeof(Log));
       clog.Type = COMPENSATION;
@@ -495,7 +500,7 @@ rollback_for_recovery(uint32_t xid){
 
       Logger::log_write(&clog, 0);
       // compensation logはcompensateされないのでtransaction tableに記録する必要はない
-      recovery_trans_table[xid].LastLSN = clog.LSN;
+      recovery_trans_table[xid].LastLSN = clog.offset;
 #ifdef DEBUG
       Logger::log_debug(clog);
 #endif
@@ -503,6 +508,8 @@ rollback_for_recovery(uint32_t xid){
     }
     lsn = log.PrevLSN;
   }
+  
+  recovery_trans_table.erase(recovery_trans_table.find(xid));
 
   close(log_fd);
 }

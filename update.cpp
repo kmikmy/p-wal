@@ -155,8 +155,10 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
   
   Logger::log_write(&log, th_id);
   pbuf->page.page_LSN = log.LSN;
-  dist_trans_table[th_id].LastLSN = log.LSN;
-  dist_trans_table[th_id].UndoNxtLSN = log.LSN; // undoできる非CLRレコードの場合はUndoNxtLSNはLastLSNと同じになる
+
+  
+  dist_trans_table[th_id].LastLSN = log.offset;
+  dist_trans_table[th_id].UndoNxtLSN = log.offset; // undoできる非CLRレコードの場合はUndoNxtLSNはLastLSNと同じになる
   
   //  cout << "[Before Update]" << endl;
   //  cout << "page[" << p.page_id << "]: page_LSN=" << p.page_LSN << ", value=" << p.value << endl;
@@ -181,7 +183,7 @@ begin(uint32_t xid, int th_id=0){
   Logger::log_write(&log,th_id);
 
   dist_trans_table[th_id].TransID = xid;
-  dist_trans_table[th_id].LastLSN = log.LSN;
+  dist_trans_table[th_id].LastLSN = log.offset;
 #ifdef DEBUG
   Logger::log_debug(log);  
 #endif
@@ -199,13 +201,11 @@ end(uint32_t xid, int th_id=0){
   memset(&log,0,sizeof(log));
   log.TransID = xid;
   log.Type = END;
-  
-  //  std::lock_guard<std::mutex> lock(trans_table_mutex);
-  //  log.PrevLSN = trans_table.at(xid).LastLSN;
+  log.PrevLSN = dist_trans_table[th_id].LastLSN;
 
   Logger::log_write(&log,th_id);
 
-  dist_trans_table[th_id].LastLSN = log.LSN;
+  dist_trans_table[th_id].LastLSN = log.offset;
 #ifdef DEBUG
   Logger::log_debug(log);  
 #endif
