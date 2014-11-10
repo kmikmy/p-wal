@@ -8,13 +8,17 @@
 // 既定のコンストラクタでは、末端に相当するイテレータを作成する
 DirtyPageTableIterator::DirtyPageTableIterator(){
   m_dp_table = (DirtyPageTable *)NULL;
-  m_index = SIZE_MAX;
+  m_index = -1;
 }
 
 // このコンストラクタでは、扱うインスタンスと最初の位置情報を受け取ってイテレータを作成する
 DirtyPageTableIterator::DirtyPageTableIterator(DirtyPageTable* dp_table, int index){
   m_dp_table = dp_table;
-  m_index = (index == 0 ? index : SIZE_MAX);
+  m_index = (index == 0 ? index : -1);
+
+  while(!(*m_dp_table).contains(m_index)){
+    m_index++;
+  }
 }
   
 DirtyPageTableIterator::DirtyPageTableIterator(const DirtyPageTableIterator& iterator){
@@ -27,7 +31,7 @@ DirtyPageTableIterator::operator*(){
   // 末端だった時に返すダミー変数
   static DP_entry dummy;
 
-  return (m_index != SIZE_MAX ? (*m_dp_table)[m_index] : dummy);
+  return (m_index != -1 ? (*m_dp_table)[m_index] : dummy);
 }
 
 DP_entry*
@@ -38,9 +42,13 @@ DirtyPageTableIterator::operator->(){
 
 DirtyPageTableIterator&
 DirtyPageTableIterator::operator++(){
+  if(m_index == -1)
+    return *this;
+
   m_index++;
-  while(m_index < SIZE_MAX && !(*m_dp_table).contains(m_index)){
-    if(m_index >= m_dp_table->bucket_size) m_index = SIZE_MAX;
+  while(m_index < m_dp_table->bucket_size && !(*m_dp_table).contains(m_index)){
+    if(m_index >= m_dp_table->bucket_size-1){ m_index = -1; m_dp_table=(DirtyPageTable *)NULL; break; }
+    m_index++;
   }
 
   return *this;
@@ -48,10 +56,16 @@ DirtyPageTableIterator::operator++(){
 
 DirtyPageTableIterator
 DirtyPageTableIterator::operator++(int){
+  if(m_index == -1)
+    return *this;
+
   DirtyPageTableIterator result = *this;
 
   m_index++;
-  if(m_index >= m_dp_table->bucket_size) m_index = SIZE_MAX;
+  while(m_index < m_dp_table->bucket_size && !(*m_dp_table).contains(m_index)){
+    if(m_index >= m_dp_table->bucket_size-1){ m_index = -1; m_dp_table=(DirtyPageTable *)NULL; break; }
+    m_index++;
+  }
 
   return result;
 }
@@ -78,6 +92,8 @@ DirtyPageTable::DirtyPageTable(int capacity) {
 
 void
 DirtyPageTable::add(uint32_t page_id, uint32_t rec_LSN){
+  printf("called add(%d,%d)\n", page_id, rec_LSN);
+
   int my_bucket = page_id % bucket_size; // 現在の実装ではバケット数はページ数に等しいためpage_id == my_bucketとなる.
   std::lock_guard<std::mutex> lock(locks[my_bucket]);
   if(table[my_bucket].rec_LSN == 0){
@@ -102,7 +118,6 @@ DirtyPageTable::contains(uint32_t page_id){
   int my_bucket = page_id % bucket_size;
   std::lock_guard<std::mutex> lock(locks[my_bucket]);
   return table[my_bucket].rec_LSN!=0 ? true : false;
-
 }
 
 DP_entry&
@@ -117,6 +132,7 @@ DirtyPageTable::operator[](int n){
 // begin 関数では、最初の位置を示すイテレータを作って返します.
 DirtyPageTable::iterator
 DirtyPageTable::begin(){
+  if(item_size==0) return DirtyPageTableIterator();
   return DirtyPageTableIterator(this,0);
 }
 

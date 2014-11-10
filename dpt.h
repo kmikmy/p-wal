@@ -13,7 +13,7 @@ class DirtyPageTableIterator : public std::iterator<std::forward_iterator_tag, D
 
 private:
   DirtyPageTable* m_dp_table;
-  size_t m_index;
+  int m_index;
 
   // 既定のコンストラクタでは、末端に相当するイテレータを作成する
   DirtyPageTableIterator();
@@ -36,8 +36,8 @@ class DirtyPageTable{
  friend class DirtyPageTableIterator;
 private:
   DP_entry*table;
-  size_t bucket_size;
-  size_t item_size;
+  int bucket_size;
+  int item_size;
 
   std::mutex *locks;
 
