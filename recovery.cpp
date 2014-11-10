@@ -19,6 +19,10 @@ extern char* ARIES_HOME;
 
 extern void page_fix(int page_id, int th_id);
 extern void rollback(uint32_t xid);
+static void page_table_debug();
+
+
+static int log_fd;
 
 void 
 remove_transaction_xid(uint32_t xid){
@@ -43,22 +47,24 @@ min_recLSN(){
   if(it == dirty_page_table.end()){
     return 0;
   }
-  
-  uint32_t min_LSN = (*it).rec_LSN;
 
-  for(; it!=dirty_page_table.end(); it++){
+  uint32_t min_LSN = (*it).rec_LSN;
+#ifdef DEBUG
+  cout << "page_id: " << (*it).page_id << ", LSN: " << (*it).rec_LSN << endl;
+#endif
+
+  for(it++; it!=dirty_page_table.end(); it++){
+#ifdef DEBUG
+    cout << "page_id: " << (*it).page_id << ", LSN: " << (*it).rec_LSN << endl;
+#endif
     if(min_LSN > (*it).rec_LSN) min_LSN = (*it).rec_LSN;
   }
+
   return min_LSN;
 }
 
 static uint32_t
 sequential_analysis(){ 
-  int log_fd = open(Logger::logpath, O_CREAT | O_RDONLY);
-  if(log_fd == -1){
-    perror("open"); exit(1);
-  }
-  
   LogHeader header;
   lseek(log_fd, 0, SEEK_SET);
   if( -1 == read(log_fd, &header, sizeof(LogHeader))){
@@ -67,6 +73,7 @@ sequential_analysis(){
 
   Log log;
   while(1){
+
     int ret = read(log_fd, &log, sizeof(Log));  
     if(ret == -1){
       perror("read"); exit(1);
@@ -99,21 +106,28 @@ sequential_analysis(){
 	  remove_transaction_xid(log.TransID); 
 	}
 
-	if(!dirty_page_table.contains(log.PageID)){ // まだdirty_page_tableにエントリがない
-	  dirty_page_table.add(log.PageID,log.LSN);
-	}
       } 
+#ifdef DEBUG
+      cout << "log.PageID: " << log.PageID << endl;
+#endif
+      if(!dirty_page_table.contains(log.PageID)){ // まだdirty_page_tableにエントリがない
+#ifdef DEBUG
+	cout << "Added page_id: " << log.PageID << " in D.P.T" << endl;
+#endif
+	dirty_page_table.add(log.PageID,log.LSN);
+      }
+
     } // if(log.Type == UPDATE || log.Type == COMPENSATION){
     else if(log.Type == END){
       remove_transaction_xid(log.TransID);
     }
   }
-  close(log_fd);
 
+  cout << "seq analysis end" << endl;;  
   return min_recLSN();
 }
 
-
+#ifdef FIO
 #define ALOGBUF_SIZE 1000
 
 class AnaLogBuffer{
@@ -218,7 +232,6 @@ public:
 
 };
 
-
 static uint32_t
 parallel_analysis(){
   std::set<int> flags;  
@@ -305,21 +318,22 @@ parallel_analysis(){
 
   return 0;
 }
+#endif
 
 // Transactionテーブルをログから復元する
 static uint32_t
 analysis(){
   uint32_t redo_lsn;
+  cout << "analysis() start" << endl;
+
 #ifndef FIO
   redo_lsn = sequential_analysis();
 #else
   redo_lsn = parallel_analysis();
 #endif 
 
-  ARIES_SYSTEM::transtable_debug();
+  //  ARIES_SYSTEM::transtable_debug();
   cout << redo_lsn << endl;
-
-  sleep(10);
 
   return redo_lsn;
 }
@@ -356,11 +370,6 @@ redo_test(){
 
 static void
 sequential_redo(){
-  int log_fd = open(Logger::logpath, O_RDONLY);
-  if(log_fd == -1){
-    perror("open"); exit(1);
-  }
-
   LogHeader lh;
   lseek(log_fd, 0, SEEK_SET);
   if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
@@ -392,7 +401,6 @@ sequential_redo(){
       }
     }
   }
-  close(log_fd);
 
 #ifdef DEBUG
   page_table_debug();
@@ -427,10 +435,10 @@ redo(){
 */
 void
 rollback_for_recovery(uint32_t xid){
-  int log_fd = open(Logger::logpath, O_RDONLY);
-  if(log_fd == -1){
-    perror("open"); exit(1);
-  }
+  // int log_fd = open(Logger::logpath, O_RDONLY);
+  // if(log_fd == -1){
+  //   perror("open"); exit(1);
+  // }
   
   uint32_t lsn = recovery_trans_table.at(xid).LastLSN; // rollbackするトランザクションの最後のLSN
 
@@ -492,36 +500,28 @@ rollback_for_recovery(uint32_t xid){
       /* BEGIN のCOMPENSATEは END にするべき(未実装) */
       Log clog;
       memset(&clog,0,sizeof(Log));
-      clog.Type = COMPENSATION;
+      clog.Type = END;
       clog.TransID = log.TransID;
       // clog.before isn't needed because compensation log record is redo-only.
-      clog.UndoNxtLSN = log.PrevLSN;
-      clog.PrevLSN = recovery_trans_table.at(xid).LastLSN;
-
+      clog.UndoNxtLSN = log.PrevLSN; // PrevLSN of BEGIN record must be 0.
+      clog.PrevLSN = recovery_trans_table.at(xid).LastLSN; 
+      
       Logger::log_write(&clog, 0);
-      // compensation logはcompensateされないのでtransaction tableに記録する必要はない
-      recovery_trans_table[xid].LastLSN = clog.offset;
 #ifdef DEBUG
       Logger::log_debug(clog);
 #endif
-      
     }
     lsn = log.PrevLSN;
   }
   
   recovery_trans_table.erase(recovery_trans_table.find(xid));
 
-  close(log_fd);
+  //  close(log_fd);
 }
 
 
 static void 
 undo(){
-  int log_fd = open(Logger::logpath, O_RDONLY);
-  if(log_fd == -1){
-    perror("open"); exit(1);
-  }
-
   LogHeader lh;  
   if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
     perror("read"); exit(1);
@@ -539,17 +539,16 @@ undo(){
 #ifdef DEBUG
   page_table_debug();
 #endif
-
-  close(log_fd);
-  
 }
 
 static void
 page_table_debug(){
   cout << endl << "**************** Page Table ****************" << endl;
-  for(int i=0;i<PAGE_N;i++)
+  for(int i=0;i<PAGE_N;i++){
+    if(page_table[i].page.pageID != i) continue;
     cout << "page[" << page_table[i].page.pageID << "]: page_LSN=" << page_table[i].page.page_LSN << ", value=" << page_table[i].page.value << endl;
   cout << endl;
+  }
 }
 
 
@@ -575,9 +574,14 @@ page_undo_write(unsigned n){
 }
 
 void recovery(){
-  
+  log_fd = open(Logger::logpath, O_CREAT | O_RDONLY);
+  if(log_fd == -1){
+    perror("open"); exit(1);
+  }
   uint32_t redo_lsn = analysis();
   redo();
   undo();
+
+  close(log_fd);
 }
 

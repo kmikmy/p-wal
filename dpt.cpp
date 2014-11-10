@@ -93,6 +93,7 @@ DirtyPageTable::DirtyPageTable(int capacity) {
 void
 DirtyPageTable::add(uint32_t page_id, uint32_t rec_LSN){
   printf("called add(%d,%d)\n", page_id, rec_LSN);
+  if(contains(page_id)) return;
 
   int my_bucket = page_id % bucket_size; // 現在の実装ではバケット数はページ数に等しいためpage_id == my_bucketとなる.
   std::lock_guard<std::mutex> lock(locks[my_bucket]);

@@ -68,6 +68,8 @@ load_master_record(){
 
 void 
 ARIES_SYSTEM::db_init(int th_num){
+  // loggerの初期化
+  Logger::init();
   // マスターレコードの作成
   load_master_record();
   // 全ページをメモリバッファに読み込んで、ロックオブジェクトを初期化する
