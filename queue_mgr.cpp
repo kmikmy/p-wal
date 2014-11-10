@@ -14,7 +14,8 @@ using namespace std;
 */
 #define MAX_QUEUE_SIZE 100000 + 1 
 //#define MAX_QUEUE_SIZE 100 + 1 
-/* processing thread の 最大数 */
+
+extern MasterRecord master_record;
 
 /* 
    TransQueue:
@@ -132,6 +133,8 @@ trans_queues_init(uint32_t ntrans, uint32_t nqueue){
     trans.TransID++;
   }
 
+  // 現在までに与えた最後のXIDをマスタレコードに保持する.
+  ARIES_SYSTEM::master_record.system_xid = trans.TransID-1;
   //  struct timeval t;
   //  gettimeofday(&t,NULL);
 
