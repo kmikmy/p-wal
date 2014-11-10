@@ -2,7 +2,7 @@
 program = aries
 objs = main.o transaction.o system.o logger.o update.o global.o buffer.o queue_mgr.o recovery.o dpt.o
 CC = g++
-CFLAGS = -g -Wall -O2 -std=c++0x -lpthread -lprofiler
+CFLAGS = -g -Wall -std=c++0x -lpthread -lprofiler
 
 all: aries aries_batch aries_fio aries_fio_batch
 
@@ -17,6 +17,8 @@ clean:
 
 aries: $(objs)
 	$(CC) $(CFLAGS) -c logger.cpp
+	$(CC) $(CFLAGS) -c system.cpp
+	$(CC) $(CFLAGS) -c recovery.cpp
 	$(CC) $(CFLAGS) -c queue_mgr.cpp
 	$(CC) $(CFLAGS) -o $(program).exe $^
 
