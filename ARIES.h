@@ -7,10 +7,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <map>
 #include <cstring>
-#include <vector>
+#include <map>
+#include <list>
 #include <set>
+#include <vector>
 
 #define PAGE_N (4096*16)
 #define MAX_UPDATE 100

@@ -83,6 +83,8 @@ sequential_analysis(){
       break;
 
     if(log.Type == BEGIN){
+      cout << "Detect BEGIN for " << log.TransID << endl;;
+
       Transaction trans;
       trans.TransID = log.TransID;
       trans.State=U;
@@ -100,12 +102,6 @@ sequential_analysis(){
       } 
       else { // log.Type == COMPENSATION
 	recovery_trans_table[log.TransID].UndoNxtLSN = log.UndoNxtLSN;
-      
-	if(log.UndoNxtLSN == 0){ 
-	  // BEGINログをCOMPENSATIONしたのでトランザクションテーブルから削除する
-	  remove_transaction_xid(log.TransID); 
-	}
-
       } 
 #ifdef DEBUG
       cout << "log.PageID: " << log.PageID << endl;
@@ -123,6 +119,31 @@ sequential_analysis(){
     }
   }
 
+  std::list<uint32_t> del_list;
+  for(TransTable::iterator it=recovery_trans_table.begin(); it!=recovery_trans_table.end(); it++){
+    if(it->second.UndoNxtLSN == 0){ 
+      // 「BEGINだけ書かれて終了したトランザクション」、または「rollbackが完了しているがENDログが書かれていないトランザクション」のENDログを書いて、トランザクションテーブルのエントリを削除する
+      del_list.push_back(it->first);
+    }
+  }
+  for(std::list<uint32_t>::iterator it=del_list.begin(); it!=del_list.end(); it++){
+    Log end_log;
+    memset(&end_log,0,sizeof(Log));
+    end_log.Type = END;
+    end_log.TransID = *it;
+    // clog.before isn't needed because compensation log record is redo-only.
+    end_log.UndoNxtLSN = 0; // PrevLSN of BEGIN record must be 0.
+    end_log.PrevLSN = recovery_trans_table.at(*it).LastLSN; 
+      
+    Logger::log_write(&end_log, 0);
+#ifdef DEBUG
+    Logger::log_debug(end_log);
+#endif
+
+    remove_transaction_xid(*it); 
+  }
+
+  Logger::log_all_flush();
   cout << "seq analysis end" << endl;;  
   return min_recLSN();
 }
