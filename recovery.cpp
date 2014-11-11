@@ -16,6 +16,7 @@ TransTable recovery_trans_table;
 extern DirtyPageTable dirty_page_table;
 extern BufferControlBlock page_table[PAGE_N];
 extern char* ARIES_HOME;
+extern MasterRecord master_record;
 
 extern void page_fix(int page_id, int th_id);
 extern void rollback(uint32_t xid);
@@ -65,15 +66,14 @@ min_recLSN(){
 
 static uint32_t
 sequential_analysis(){ 
-  LogHeader header;
+  LogHeader lh;
   lseek(log_fd, 0, SEEK_SET);
-  if( -1 == read(log_fd, &header, sizeof(LogHeader))){
+  if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
     perror("read"); exit(1);
   }
 
   Log log;
-  while(1){
-
+  for(uint32_t i=0;i<lh.count;i++){
     int ret = read(log_fd, &log, sizeof(Log));  
     if(ret == -1){
       perror("read"); exit(1);
@@ -83,7 +83,7 @@ sequential_analysis(){
       break;
 
     if(log.Type == BEGIN){
-      cout << "Detect BEGIN for " << log.TransID << endl;;
+      //      cout << "Detect BEGIN for " << log.TransID << endl;;
 
       Transaction trans;
       trans.TransID = log.TransID;
@@ -92,6 +92,8 @@ sequential_analysis(){
       trans.UndoNxtLSN=0;
       
       recovery_trans_table[trans.TransID] = trans;
+      if(ARIES_SYSTEM::master_record.system_xid < trans.TransID)
+	ARIES_SYSTEM::master_record.system_xid = trans.TransID;
     } 
     else if(log.Type == UPDATE || log.Type == COMPENSATION){
       recovery_trans_table[log.TransID].LastLSN = log.offset;
@@ -144,7 +146,7 @@ sequential_analysis(){
   }
 
   Logger::log_all_flush();
-  cout << "seq analysis end" << endl;;  
+  cout << "seq analysis end" << endl;
   return min_recLSN();
 }
 
@@ -398,7 +400,7 @@ sequential_redo(){
   }
   
   Log log;
-  while(1){
+  for(uint32_t i=0;i<lh.count;i++){
     int ret = read(log_fd, &log, sizeof(Log));  
     if(ret == -1){
       perror("read"); exit(1);
