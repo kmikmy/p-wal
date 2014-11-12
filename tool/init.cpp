@@ -45,6 +45,7 @@ void init(){
 
   master_record.mr_chkp=0;
   master_record.system_xid=0;
+  master_record.system_last_lsn=0;
   master_record.last_exit=true;
 
   cout << "[after init]" << endl;
