@@ -6,9 +6,9 @@ class DirtyPageTable;
 typedef struct {
   uint32_t page_id;
   uint32_t rec_LSN;
-} DP_entry;
+} DP_Entry;
 
-class DirtyPageTableIterator : public std::iterator<std::forward_iterator_tag, DP_entry>{
+class DirtyPageTableIterator : public std::iterator<std::forward_iterator_tag, DP_Entry>{
   friend class DirtyPageTable;
 
 private:
@@ -26,8 +26,8 @@ public:
   DirtyPageTableIterator operator++(int);
   bool operator!=(const DirtyPageTableIterator& iterator);
   bool operator==(const DirtyPageTableIterator& iterator);
-  DP_entry& operator*();
-  DP_entry* operator->();
+  DP_Entry& operator*();
+  DP_Entry* operator->();
 
 };
 
@@ -35,7 +35,7 @@ public:
 class DirtyPageTable{
  friend class DirtyPageTableIterator;
 private:
-  DP_entry*table;
+  DP_Entry*table;
   int bucket_size;
   int item_size;
 
@@ -48,7 +48,7 @@ private:
   void add(uint32_t page_id, uint32_t rec_LSN);
   void remove(uint32_t page_id);
   bool contains(uint32_t page_id);
-  DP_entry& operator[](int n);
+  DP_Entry& operator[](int n);
 
   typedef DirtyPageTableIterator iterator;
   DirtyPageTable::iterator begin();

@@ -26,15 +26,15 @@ DirtyPageTableIterator::DirtyPageTableIterator(const DirtyPageTableIterator& ite
   m_index = iterator.m_index;
 }
 
-DP_entry&
+DP_Entry&
 DirtyPageTableIterator::operator*(){
   // 末端だった時に返すダミー変数
-  static DP_entry dummy;
+  static DP_Entry dummy;
 
   return (m_index != -1 ? (*m_dp_table)[m_index] : dummy);
 }
 
-DP_entry*
+DP_Entry*
 DirtyPageTableIterator::operator->(){
 
   return &(*m_dp_table)[m_index];
@@ -86,7 +86,7 @@ DirtyPageTable::DirtyPageTable(int capacity) {
   bucket_size = capacity;
   item_size = 0;
     
-  table = new DP_entry[capacity];
+  table = new DP_Entry[capacity];
   locks = new std::mutex[capacity];
 }
 
@@ -121,7 +121,7 @@ DirtyPageTable::contains(uint32_t page_id){
   return table[my_bucket].rec_LSN!=0 ? true : false;
 }
 
-DP_entry&
+DP_Entry&
 DirtyPageTable::operator[](int n){
   if(n < 0 || n >= (int)bucket_size){
     printf("index is out of range\n"); exit(1);
