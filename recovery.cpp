@@ -34,14 +34,24 @@ remove_transaction_xid(uint32_t xid){
 }
 
 static void
-show_transaction_table(){
+transaction_table_debug(){
   map<uint32_t,Transaction>::iterator it;
-  
+  cout << "**************** Transaction Table ****************" << endl;  
   for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end(); ++it){
     std::cout << it->first << std::endl;
   }
+  cout << endl;
 }
 
+static void 
+dirty_page_table_debug(){
+  DirtyPageTable::iterator it;
+  cout << "**************** Dirty Page Table ****************" << endl;  
+  for(it=dirty_page_table.begin(); it!=dirty_page_table.end(); it++){
+    cout << " * " << (*it).page_id << ": " << (*it).rec_LSN << endl;
+  }
+  cout << endl;
+}
 
 static uint32_t
 min_recLSN(){
@@ -153,8 +163,6 @@ sequential_analysis(){
     remove_transaction_xid(*it); 
   }
 
-  Logger::log_all_flush();
-  cout << "seq analysis end" << endl;
   return min_recLSN();
 }
 
@@ -355,7 +363,6 @@ parallel_analysis(){
 static uint32_t
 analysis(){
   uint32_t redo_lsn;
-  cout << "analysis() start" << endl;
 
 #ifndef FIO
   redo_lsn = sequential_analysis();
@@ -363,22 +370,21 @@ analysis(){
   redo_lsn = parallel_analysis();
 #endif 
 
-  //  ARIES_SYSTEM::transtable_debug();
-  cout << redo_lsn << endl;
-
+  //  cout << redo_lsn << endl;
   return redo_lsn;
 }
 
 static void
-sequential_redo(){
+sequential_redo(uint64_t redo_lsn){
   LogHeader lh;
   lseek(log_fd, 0, SEEK_SET);
   if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
     perror("read"); exit(1);
   }
   
+  lseek(log_fd, redo_lsn, SEEK_SET);
   Log log;
-  for(uint32_t i=0;i<lh.count;i++){
+  for(uint32_t i=(uint32_t)(redo_lsn/sizeof(Log));i<lh.count;i++){
     int ret = next_log(log_fd, &log);
     if(ret == 0)
       break;
@@ -414,18 +420,17 @@ sequential_redo(){
 
 
 static void
-parallel_redo(){
+parallel_redo(uint64_t redo_lsn){
 
 }
 
 static void 
-redo(){
+redo(uint64_t redo_lsn){
 #ifndef FIO
-  sequential_redo();
+  sequential_redo(redo_lsn);
 #else
-  parallel_redo();
+  parallel_redo(redo_lsn);
 #endif 
-  
 }
 
 
@@ -492,7 +497,6 @@ rollback_for_recovery(uint32_t xid){
       continue;
     }
     else if(log.Type == BEGIN){
-      /* BEGIN のCOMPENSATEは END にするべき(未実装) */
       Log clog;
       memset(&clog,0,sizeof(Log));
       clog.Type = END;
@@ -515,6 +519,19 @@ rollback_for_recovery(uint32_t xid){
 }
 
 
+static uint64_t
+max_undo_nxt_lsn_offset(){
+  uint64_t offset_max = 0;
+  map<uint32_t, Transaction>::iterator it;
+  for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end();it++){
+    if(it->second.UndoNxtLSN > offset_max){
+      offset_max = it->second.UndoNxtLSN;
+    }
+  }
+  
+  return offset_max;
+}
+
 static void 
 undo(){
   LogHeader lh;  
@@ -522,28 +539,92 @@ undo(){
     perror("read"); exit(1);
   }
 
-  map<uint32_t, Transaction>::iterator it;
-  for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end();it++){
-    rollback_for_recovery(it->second.TransID);    
+  // map<uint32_t, Transaction>::iterator it;
+  // for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end();it++){
+  //   rollback_for_recovery(it->second.TransID);    
+  // }
+
+  Log log;
+  while(!recovery_trans_table.empty()){ // 現在の実装ではトランザクションテーブルに残っているトランザクションエントリの状態は全て'U'
+    uint32_t undo_lsn_offset = max_undo_nxt_lsn_offset();
+    if(undo_lsn_offset == 0){
+      PERR("undo_lsn_offset is 0");
+    }
+    
+    lseek(log_fd, undo_lsn_offset, SEEK_SET);
+    int ret = read(log_fd, &log, sizeof(Log));
+    if(ret == -1){
+      PERR("read");
+    } else if(ret == 0){
+      PERR("log doesn't exist");
+    }
+
+#ifdef DEBUG    
+    Logger::log_debug(log);
+#endif
+    
+    if (log.Type == UPDATE){
+      int idx=log.PageID;
+      
+      page_table[idx].page.value = log.before;
+      page_table[idx].page.page_LSN = log.LSN; 
+
+      Log clog;
+      memset(&clog,0,sizeof(Log));
+      clog.Type = COMPENSATION;
+      clog.TransID = log.TransID;
+      clog.PageID = log.PageID;
+      clog.UndoNxtLSN = log.PrevLSN;
+      /* clog.before isn't needed to store "before value" because compensation log record is redo-only. but, for visibility it is stored. */
+      clog.before = log.after;
+      clog.after = log.before;
+      clog.PrevLSN = recovery_trans_table[log.TransID].LastLSN;
+
+      // compensation log recordをどこに書くかという問題はひとまず置いておく
+      // とりあえず全部id=0のログブロックに書く
+      ret = Logger::log_write(&clog, 0); 
+
+      recovery_trans_table[log.TransID].LastLSN = clog.offset;
+      recovery_trans_table[log.TransID].UndoNxtLSN = log.PrevLSN;
+
+#ifdef DEBUG
+      Logger::log_debug(clog);
+#endif
+
+    }
+    else if(log.Type == COMPENSATION){
+      recovery_trans_table[log.TransID].UndoNxtLSN = log.UndoNxtLSN;
+    }
+    else if(log.Type == BEGIN){
+      Log clog;
+      memset(&clog,0,sizeof(Log));
+      clog.Type = END;
+      clog.TransID = log.TransID;
+      clog.UndoNxtLSN = log.PrevLSN; // PrevLSN of BEGIN record must be 0.
+      clog.PrevLSN = recovery_trans_table[log.TransID].LastLSN; 
+      
+      Logger::log_write(&clog, 0);
+#ifdef DEBUG
+      Logger::log_debug(clog);
+#endif
+      
+      recovery_trans_table.erase(recovery_trans_table.find(log.TransID));
+    }
   }
 
   recovery_trans_table.clear();
 
   //  page_undo_write(PAGE_N);
-
-#ifdef DEBUG
-  page_table_debug();
-#endif
 }
 
 static void
 page_table_debug(){
-  cout << endl << "**************** Page Table ****************" << endl;
+  cout << "**************** Page Table ****************" << endl;
   for(int i=0;i<PAGE_N;i++){
-    if(page_table[i].page.pageID != i) continue;
+    if(page_table[i].page.page_LSN == 0) continue;
     cout << "page[" << page_table[i].page.pageID << "]: page_LSN=" << page_table[i].page.page_LSN << ", value=" << page_table[i].page.value << endl;
-  cout << endl;
   }
+  cout << endl;
 }
 
 
@@ -574,8 +655,19 @@ void recovery(){
     perror("open"); exit(1);
   }
   uint32_t redo_lsn = analysis();
-  redo();
+  cout << "done through analysis pass." << endl;
+  transaction_table_debug();
+  dirty_page_table_debug();
+
+  redo(redo_lsn);
+  cout << "done through redo pass." << endl;
+  page_table_debug();
+
   undo();
+  cout << "done through undo pass." << endl;
+  page_table_debug();
+
+  Logger::log_all_flush();
 
   close(log_fd);
 }

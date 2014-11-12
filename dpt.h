@@ -15,12 +15,12 @@ private:
   DirtyPageTable* m_dp_table;
   int m_index;
 
-  // 既定のコンストラクタでは、末端に相当するイテレータを作成する
-  DirtyPageTableIterator();
   // このコンストラクタでは、扱うインスタンスと最初の位置情報を受け取ってイテレータを作成する
   DirtyPageTableIterator(DirtyPageTable* dp_table, int index);
 
 public:
+  // 既定のコンストラクタでは、末端に相当するイテレータを作成する
+  DirtyPageTableIterator();
   DirtyPageTableIterator(const DirtyPageTableIterator& iterator);
   DirtyPageTableIterator& operator++();
   DirtyPageTableIterator operator++(int);

@@ -38,16 +38,6 @@ operator>>( std::istream& is, T_Mode& i )
   return is ;
 }
 
-static void 
-show_dp(){
-  cout << endl << " *** show Dirty Page ***" << endl;
-
-  for(  DirtyPageTable::iterator it=dirty_page_table.begin(); it!=dirty_page_table.end(); it++){
-    cout << " * " << (*it).page_id << ": " << (*it).rec_LSN << endl;
-  }
-  cout << "***********************" << endl;
-}
-
 uint32_t 
 construct_transaction(Transaction *trans){
     trans->TransID = ARIES_SYSTEM::xid_inc();
