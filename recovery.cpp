@@ -292,7 +292,7 @@ analysis(){
 #ifdef DEBUG
 	cout << "Added page_id: " << log.PageID << " in D.P.T" << endl;
 #endif
-	dirty_page_table.add(log.PageID,log.LSN);
+	dirty_page_table.add(log.PageID, log.LSN, log.offset, log.file_id);
       }
 
     } // if(log.Type == UPDATE || log.Type == COMPENSATION){

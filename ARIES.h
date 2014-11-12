@@ -80,11 +80,11 @@ typedef struct {
   OP op; // 8 bytes
   /* ここまでで40 bytes */
 
+  int file_id;
   uint64_t offset;
-  /* ここまでで48 bytes */ 
+  /* ここまでで52 bytes */ 
   
-  
-  char padding[464];
+  char padding[460];
 } Log; /* 512バイト */
 
 
@@ -130,6 +130,7 @@ class Logger
   static void log_debug(Log log);
   static void init();
   static uint32_t read_LSN();
+  static uint64_t current_offset_logfile_for_id(int th_id);
 };
 
 #endif //  _ARIES

@@ -74,7 +74,7 @@ page_fix(int page_id, int th_id){
        RecLSN以降にそのページに、Diskに更新が反映されていないUPDATEログがある可能性がある。
        リカバリ時、このページは少なくともRecLSNからredoをしなければない。
     */
-    dirty_page_table.add(pbuf->page_id, Logger::read_LSN());
+    dirty_page_table.add(pbuf->page_id, Logger::read_LSN(), Logger::current_offset_logfile_for_id(th_id), th_id);
     pbuf->fixed_count=1;
   }
   else{ // 既にfixされているなら

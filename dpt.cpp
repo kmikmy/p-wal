@@ -91,7 +91,7 @@ DirtyPageTable::DirtyPageTable(int capacity) {
 }
 
 void
-DirtyPageTable::add(uint32_t page_id, uint32_t rec_LSN){
+DirtyPageTable::add(uint32_t page_id, uint32_t rec_LSN, uint64_t rec_offset, int log_file_id){
   if(contains(page_id)) return;
   //  printf("called add(%d,%d)\n", page_id,rec_LSN);
 
@@ -100,6 +100,8 @@ DirtyPageTable::add(uint32_t page_id, uint32_t rec_LSN){
   if(table[my_bucket].rec_LSN == 0){
     table[my_bucket].page_id = page_id;
     table[my_bucket].rec_LSN = rec_LSN;
+    table[my_bucket].rec_offset = rec_offset;
+    table[my_bucket].log_file_id = log_file_id;
     item_size++;
   }
 }

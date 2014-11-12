@@ -19,8 +19,6 @@ enum T_Mode { COMMIT_M, UPDATE_M, ROLLBACK_M, FLUSH_M, SHOWDP_M };
 // normal processing 用
 DistributedTransTable *dist_trans_table;
 
-extern DirtyPageTable dirty_page_table;
-
 extern void operation_select(OP *op);
 extern void page_select(uint32_t *page_id);
 extern int update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int th_id);

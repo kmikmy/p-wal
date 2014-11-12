@@ -71,7 +71,6 @@ class LogBuffer{
       perror("read"); exit(1);
     }
   }
-  
 
   /*
     logHeaderはbase_addrに位置し、Logがその後に続く
@@ -147,6 +146,12 @@ class LogBuffer{
     return ret;
   }
   
+  uint64_t
+  next_offset(){
+    uint64_t pos = base_addr + sizeof(LogHeader) + (header.count + size()) * sizeof(Log);
+    return pos;
+  }
+
 };
 
 static LogBuffer logBuffer[MAX_WORKER_THREAD];
@@ -197,6 +202,7 @@ Logger::log_write(Log *log, int th_id){
   lao = logBuffer[th_id].next_lsn();
   log->LSN = lao.first;
   log->offset = lao.second;
+  log->file_id = th_id;
 
   logBuffer[th_id].push(*log);
 
@@ -217,6 +223,11 @@ Logger::log_all_flush(){
 uint32_t
 Logger::read_LSN(){
   return ARIES_SYSTEM::master_record.system_last_lsn;
+}
+
+uint64_t
+Logger::current_offset_logfile_for_id(int th_id){
+  return logBuffer[th_id].next_offset();
 }
 
 void 

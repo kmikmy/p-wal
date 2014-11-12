@@ -6,6 +6,8 @@ class DirtyPageTable;
 typedef struct {
   uint32_t page_id;
   uint32_t rec_LSN;
+  uint32_t log_file_id;
+  uint64_t rec_offset;
 } DP_Entry;
 
 class DirtyPageTableIterator : public std::iterator<std::forward_iterator_tag, DP_Entry>{
@@ -45,7 +47,7 @@ private:
 
  public:
   DirtyPageTable(int capacity);
-  void add(uint32_t page_id, uint32_t rec_LSN);
+  void add(uint32_t page_id, uint32_t rec_LSN, uint64_t rec_offset, int log_file_id);
   void remove(uint32_t page_id);
   bool contains(uint32_t page_id);
   DP_Entry& operator[](int n);
