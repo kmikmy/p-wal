@@ -82,6 +82,10 @@ page_fix(int page_id, int th_id){
   }
 }
 
+void page_unfix(int page_id){
+  page_table[page_id].fixed_count--;
+}
+
 
 /* 
    fixされていなくて、modifiedフラグが立っているページのみflushする。

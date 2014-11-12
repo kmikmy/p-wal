@@ -19,6 +19,7 @@ extern char* ARIES_HOME;
 extern MasterRecord master_record;
 
 extern void page_fix(int page_id, int th_id);
+extern void page_unfix(int page_id);
 extern void rollback(uint32_t xid);
 static void page_table_debug();
 
@@ -64,6 +65,16 @@ min_recLSN(){
   return min_LSN;
 }
 
+static int
+next_log(int log_fd, Log *log){
+    int ret = read(log_fd, log, sizeof(Log));  
+    if(ret == -1){
+      PERR("read");
+    }
+
+    return ret;
+}
+
 static uint32_t
 sequential_analysis(){ 
   LogHeader lh;
@@ -74,11 +85,8 @@ sequential_analysis(){
 
   Log log;
   for(uint32_t i=0;i<lh.count;i++){
-    int ret = read(log_fd, &log, sizeof(Log));  
-    if(ret == -1){
-      perror("read"); exit(1);
-    }
-
+    int ret = next_log(log_fd, &log);
+  
     if(ret == 0)
       break;
 
@@ -361,36 +369,6 @@ analysis(){
   return redo_lsn;
 }
 
-
-static bool 
-redo_test(){
-  int fd;
-  std::string page_filename = ARIES_HOME;
-  page_filename += "/data/pages.dat";
-
-  if( (fd = open(page_filename.c_str(),  O_RDONLY )) == -1){
-    perror("open");
-    exit(1);
-  }
-
-  lseek(fd,0,SEEK_SET);
-  Page p;
-  int ret; int n=0;
-  while( 0 != (ret = read(fd, &p, sizeof(Page)))){
-    if(ret == -1){
-      perror("exit"); exit(1);
-    }
-
-    if( p.pageID != page_table[n].page.pageID || p.page_LSN != page_table[n].page.page_LSN || p.value != page_table[n].page.value ){
-      return false;
-    }
-    n++;
-  }
-
-  return true;
-}
-
-
 static void
 sequential_redo(){
   LogHeader lh;
@@ -401,10 +379,7 @@ sequential_redo(){
   
   Log log;
   for(uint32_t i=0;i<lh.count;i++){
-    int ret = read(log_fd, &log, sizeof(Log));  
-    if(ret == -1){
-      perror("read"); exit(1);
-    }
+    int ret = next_log(log_fd, &log);
     if(ret == 0)
       break;
 
@@ -414,13 +389,20 @@ sequential_redo(){
 
     if (log.Type == UPDATE || log.Type == COMPENSATION){
       int idx=log.PageID;
+      if(dirty_page_table.contains(idx) && log.LSN >= dirty_page_table[idx].rec_LSN){
+	// redoは並列に行わないのでページへのlockはいらない
+	page_fix(idx, 0);
       
-      // redoは並列に行わないのでページへのlockはいらない
-      page_fix(idx, 0);
-      
-      if(page_table[idx].page.page_LSN <= log.LSN){
-	page_table[idx].page.value = log.after;
-	//	page_table[idx].page.page_LSN = log.LSN;  必要ない
+	if(page_table[idx].page.page_LSN < log.LSN){
+	  page_table[idx].page.value = log.after;
+	  page_table[idx].page.page_LSN = log.LSN;
+	}
+	else{ /* update dirty page list with correct info. this will happen if this
+		 page was written to disk after the checkpt but before sys failure. */
+	  dirty_page_table[idx].rec_LSN = page_table[idx].page.page_LSN + 1;
+	}
+
+        page_unfix(idx);
       }
     }
   }
@@ -428,11 +410,6 @@ sequential_redo(){
 #ifdef DEBUG
   page_table_debug();
 #endif
-
-  if(redo_test()) 
-    cout << "success redo test!" << endl << endl;
-  else
-    cout << "failed redo test! It possibly need undo!" << endl << endl;
 }
 
 
@@ -458,11 +435,6 @@ redo(){
 */
 void
 rollback_for_recovery(uint32_t xid){
-  // int log_fd = open(Logger::logpath, O_RDONLY);
-  // if(log_fd == -1){
-  //   perror("open"); exit(1);
-  // }
-  
   uint32_t lsn = recovery_trans_table.at(xid).LastLSN; // rollbackするトランザクションの最後のLSN
 
   Log log;

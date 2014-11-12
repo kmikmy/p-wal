@@ -1,5 +1,6 @@
 #ifndef _ARIES
 #define _ARIES
+#include "debug.h"
 #include <mutex>
 #include <cstdlib>
 #include <sys/types.h>
