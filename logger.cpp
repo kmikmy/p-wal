@@ -19,7 +19,6 @@ const char* Logger::logpath = "/work/kamiya/log.dat";
 const char* Logger::logpath = "/dev/fioa";
 //const char* Logger::logpath = "/dev/shm/kamiya/log.dat";
 #endif
-static uint32_t global_lsn;
 
 typedef pair<off_t, off_t> LSN_and_Offset;
 
@@ -134,13 +133,13 @@ class LogBuffer{
 
 #ifndef FIO
     ret.first = pos;
-    global_lsn = pos;
+    ARIES_SYSTEM::master_record.system_last_lsn = pos;
 #else
     int old, new_val;
     do {
-      old = global_lsn;
+      old = ARIES_SYSTEM::master_record.system_last_lsn;
       new_val = old+1;
-    }while(!CAS(&global_lsn, old, new_val));
+    }while(!CAS(&ARIES_SYSTEM::master_record.system_last_lsn, old, new_val));
     
     ret.first = new_val;
 #endif    
@@ -217,7 +216,7 @@ Logger::log_all_flush(){
 
 uint32_t
 Logger::read_LSN(){
-  return global_lsn;
+  return ARIES_SYSTEM::master_record.system_last_lsn;
 }
 
 void 

@@ -23,8 +23,111 @@ extern void page_unfix(int page_id);
 extern void rollback(uint32_t xid);
 static void page_table_debug();
 
-
 static int log_fd;
+
+#ifdef FIO
+#define ALOGBUF_SIZE 128
+class AnaLogBuffer{
+private:
+  int th_id; // 書き込みスレッドの番号に対応したid
+  int log_fd; // logファイルへのFD
+  LogHeader header; // LogHeader
+  off_t base_addr; // LogHeaderの先頭アドレス
+  off_t log_ptr; // 現在読んでいるlogの部分のアドレス
+  uint32_t rest_nlog; // 残りのログの個数
+
+  Log logs[ALOGBUF_SIZE]; // Analysis Log Buffer
+  int idx; // アナリシスログバッファで現在のログポインタ
+  int nlog; // LogBuffer内のログの個数
+
+
+public:
+  AnaLogBuffer(){
+    clear();
+    log_fd = open(Logger::logpath, O_RDONLY | O_SYNC);
+  }
+
+  /* AnaLogBufferを使用する前に、ログ(スレッド)番号を与えて一度呼び出す */
+  void 
+  init(int _th_id)
+  {
+    th_id = _th_id;
+    base_addr = (off_t)th_id * LOG_OFFSET;
+    log_ptr = base_addr + sizeof(LogHeader);
+
+    lseek(log_fd, base_addr, SEEK_SET);
+    int ret = read(log_fd, &header, sizeof(LogHeader));
+    if(-1 == ret){
+      perror("read"); exit(1);
+    }
+    rest_nlog = header.count;
+
+    readLogs();
+  }
+
+  void
+  term(){
+    close(log_fd);
+  }
+
+  void
+  clear(){
+    idx=0;
+    memset(logs,0,sizeof(logs));
+  }
+
+  int
+  readLogs(){
+
+    nlog = (rest_nlog<ALOGBUF_SIZE)?rest_nlog:ALOGBUF_SIZE; //読み込むログの個数を決める
+    //    cout << "readLogs: " << nlog << endl;
+    if(nlog == 0){
+      return -1;
+    }
+    
+    clear();
+    
+    lseek(log_fd, log_ptr, SEEK_SET);
+    int ret = read(log_fd, logs, sizeof(Log)*nlog);
+    if(-1 == ret){
+      perror("read"); exit(1);
+    }
+    log_ptr += ret;
+    rest_nlog -= nlog;
+
+    //    cout << "rest: " << rest_nlog << endl;
+
+    return nlog;
+  }
+  
+  //Logを一つ取り出す(ポインタを先へ進める)
+  Log
+  next()
+  {
+    // Logの再読み込み
+    if(idx == nlog){ 
+      if(readLogs()==-1)
+	throw "read no log";
+    }
+
+    idx++;
+    return logs[idx-1];
+  }
+
+  // 先頭のログを読む(ポインタは先へ進めない)
+  Log
+  front()
+  {
+    // Logの再読み込み
+    if(idx == nlog){ 
+      if(readLogs()==-1)
+	throw "read no log";
+    }
+    
+    return logs[idx];
+  }
+};
+#endif
 
 void 
 remove_transaction_xid(uint32_t xid){
@@ -75,6 +178,8 @@ min_recLSN(){
   return min_LSN;
 }
 
+
+#ifndef FIO
 static int
 next_log(int log_fd, Log *log){
     int ret = read(log_fd, log, sizeof(Log));  
@@ -84,21 +189,78 @@ next_log(int log_fd, Log *log){
 
     return ret;
 }
+#else
+static int
+next_log(AnaLogBuffer *alogs, std::set<int> *flags, Log *log){
+  int min_id;
+  Log min_log,tmp_log;
+
+  std::set<int>::iterator it;
+  std::set<int> del_list;
+
+  min_log.LSN = ~(uint32_t)0; // NOTのビット演算(uint32_tの最大値を求めている)
+  for( it=(*flags).begin(); it!=(*flags).end(); it++){
+    try{
+      //	cout << *it << endl;
+      tmp_log = alogs[*it].front();
+      if(min_log.LSN > tmp_log.LSN){
+	min_id = *it;
+	min_log = tmp_log;
+      }	
+    }
+    catch(char const* e) {
+      del_list.insert(*it);
+      continue;
+    }
+  }
+
+  for( it=del_list.begin(); it!=del_list.end(); it++){
+    //      cout << "el: " << *it << endl;
+    (*flags).erase((*flags).find(*it));
+  }
+  del_list.clear();
+
+  if((*flags).empty()){ // reached end of all log file.
+    return 0;
+  }
+
+  alogs[min_id].next(); // LSNが一番小さなログを持っているalogを一つ進める
+  *log = min_log;
+
+  return 1;
+}
+#endif
 
 static uint32_t
-sequential_analysis(){ 
+analysis(){
+  Log log;
+
+#ifndef FIO
   LogHeader lh;
   lseek(log_fd, 0, SEEK_SET);
   if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
     perror("read"); exit(1);
   }
 
-  Log log;
   for(uint32_t i=0;i<lh.count;i++){
     int ret = next_log(log_fd, &log);
-  
-    if(ret == 0)
-      break;
+    if(ret == 0) break;
+
+#else
+  std::set<int> flags;  
+  AnaLogBuffer alogs[MAX_WORKER_THREAD];
+
+  for(int i=0;i<MAX_WORKER_THREAD;i++){
+    alogs[i].init(i);
+    flags.insert(i);
+  }
+
+  while(1){
+    int ret = next_log(alogs, &flags, &log);
+    if(ret == 0) break;
+    
+    Logger::log_debug(log);
+#endif
 
     if(log.Type == BEGIN){
       //      cout << "Detect BEGIN for " << log.TransID << endl;;
@@ -163,216 +325,16 @@ sequential_analysis(){
     remove_transaction_xid(*it); 
   }
 
-  return min_recLSN();
-}
-
 #ifdef FIO
-#define ALOGBUF_SIZE 1000
-
-class AnaLogBuffer{
-private:
-  int th_id; // 書き込みスレッドの番号に対応したid
-  int log_fd; // logファイルへのFD
-  LogHeader header; // LogHeader
-  off_t base_addr; // LogHeaderの先頭アドレス
-  off_t log_ptr; // 現在読んでいるlogの部分のアドレス
-  uint32_t rest_nlog; // 残りのログの個数
-
-  Log logs[ALOGBUF_SIZE]; // Analysis Log Buffer
-  int idx; // アナリシスログバッファで現在のログポインタ
-  int nlog; // LogBuffer内のログの個数
-
-
-public:
-  AnaLogBuffer(){
-    clear();
-    log_fd = open(Logger::logpath, O_RDONLY | O_SYNC);
-  }
-
-  /* AnaLogBufferを使用する前に、ログ(スレッド)番号を与えて一度呼び出す */
-  void 
-  init(int _th_id)
-  {
-    th_id = _th_id;
-    base_addr = (off_t)th_id * LOG_OFFSET;
-    log_ptr = base_addr + sizeof(LogHeader);
-
-    lseek(log_fd, base_addr, SEEK_SET);
-    int ret = read(log_fd, &header, sizeof(LogHeader));
-    if(-1 == ret){
-      perror("read"); exit(1);
-    }
-    rest_nlog = header.count;
-
-    readLogs();
-  }
-
-  void
-  term(){
-    close(log_fd);
-  }
-
-  void
-  clear(){
-    idx=0;
-    memset(logs,0,sizeof(logs));
-  }
-
-  int
-  readLogs(){
-
-    nlog = (rest_nlog<ALOGBUF_SIZE)?rest_nlog:ALOGBUF_SIZE; //読み込むログの個数を決める
-    cout << "readLogs: " << nlog << endl;
-    if(nlog == 0){
-      return -1;
-    }
-    
-    clear();
-    
-    lseek(log_fd, log_ptr, SEEK_SET);
-    int ret = read(log_fd, logs, sizeof(Log)*nlog);
-    if(-1 == ret){
-      perror("read"); exit(1);
-    }
-    log_ptr += ret;
-    rest_nlog -= nlog;
-
-    cout << "rest: " << rest_nlog << endl;
-    cout << "nlog: " << nlog << endl;
-    return nlog;
-  }
-  
-  //Logを一つ取り出す(ポインタを先へ進める)
-  Log
-  next()
-  {
-    // Logの再読み込み
-    if(idx == nlog){ 
-      if(readLogs()==-1)
-	throw "read no log";
-    }
-
-    idx++;
-    return logs[idx-1];
-  }
-
-  // 先頭のログを読む(ポインタは先へ進めない)
-  Log
-  front()
-  {
-    // Logの再読み込み
-    if(idx == nlog){ 
-      if(readLogs()==-1)
-	throw "read no log";
-    }
-    
-    return logs[idx];
-  }
-
-};
-
-static uint32_t
-parallel_analysis(){
-  std::set<int> flags;  
-  AnaLogBuffer alogs[MAX_WORKER_THREAD];
-
-  for(int i=0;i<MAX_WORKER_THREAD;i++){
-    alogs[i].init(i);
-    flags.insert(i);
-  }
-  
-  int min_id;
-  Log min_log,tmp_log;
-
-  std::set<int>::iterator it;
-  std::set<int> del_list;
-  while(1){
-    min_log.LSN = ~(uint32_t)0; // NOTのビット演算
-    for( it=flags.begin(); it!=flags.end(); it++){
-      try{
-	//	cout << *it << endl;
-	tmp_log = alogs[*it].front();
-	if(min_log.LSN > tmp_log.LSN){
-	  min_id = *it;
-	  min_log = tmp_log;
-	}	
-      }
-      catch(char const* e) {
-	del_list.insert(*it);
-	continue;
-      }
-    }
-
-    for( it=del_list.begin(); it!=del_list.end(); it++){
-      //      cout << "el: " << *it << endl;
-      flags.erase(flags.find(*it));
-    }
-    del_list.clear();
-
-    if(flags.empty()){
-      break;
-    }
-
-
-    // cout << "search log_file is: ";
-    // for( it=flags.begin(); it!=flags.end(); it++){
-    //   cout << *it ;
-    // }
-    // cout << endl;
-
-    
-    //　LSNが一番小さなログを処理する
-    alogs[min_id].next();
-    Log log = min_log;
-    
-    Logger::log_debug(log);
-    //    sleep(1);
-    if(log.Type == BEGIN){
-      Transaction trans;
-      trans.TransID = log.TransID;
-      trans.State=U;
-      trans.LastLSN=log.offset;
-      trans.UndoNxtLSN=0;
-      
-      recovery_trans_table[trans.TransID]=trans;
-    } 
-    else if(log.Type == UPDATE){
-      recovery_trans_table[log.TransID].LastLSN = log.LSN;
-    } 
-    else if(log.Type == COMPENSATION){
-      recovery_trans_table[log.TransID].LastLSN = log.LSN;
-      if(log.UndoNxtLSN == 0){ 
-	// BEGINログをCOMPENSATIONしたのでトランザクションテーブルから削除する
-	remove_transaction_xid(log.TransID); 
-      }
-    }
-    else if(log.Type == END){
-      remove_transaction_xid(log.TransID);
-    }
-  }
-
   for(int i=0;i<MAX_WORKER_THREAD;i++){
     alogs[i].term();
   }
-
-  return 0;
-}
 #endif
 
-// Transactionテーブルをログから復元する
-static uint32_t
-analysis(){
-  uint32_t redo_lsn;
+  return min_recLSN();
+}
 
 #ifndef FIO
-  redo_lsn = sequential_analysis();
-#else
-  redo_lsn = parallel_analysis();
-#endif 
-
-  //  cout << redo_lsn << endl;
-  return redo_lsn;
-}
 
 static void
 sequential_redo(uint64_t redo_lsn){
@@ -418,11 +380,14 @@ sequential_redo(uint64_t redo_lsn){
 #endif
 }
 
+#else
 
 static void
 parallel_redo(uint64_t redo_lsn){
-
+  sleep(100);
 }
+
+#endif
 
 static void 
 redo(uint64_t redo_lsn){
