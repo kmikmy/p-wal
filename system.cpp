@@ -133,7 +133,7 @@ ARIES_SYSTEM::normal_exit()
 
 void ARIES_SYSTEM::transtable_debug(){
   cout << "++++++++++++++++transaction table++++++++++++++++++" << endl;
-  map<uint32_t, Transaction>::iterator it;
+  TransTable::iterator it;
   for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end(); it++){
     Transaction trans = it->second;
     cout << "+ [" << trans.TransID << "] " << "State=" << trans.State << ", LastLSN=" << trans.LastLSN << ", UndoNxtLSN=" << trans.UndoNxtLSN << endl;

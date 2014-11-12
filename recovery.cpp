@@ -138,7 +138,7 @@ remove_transaction_xid(uint32_t xid){
 
 static void
 transaction_table_debug(){
-  map<uint32_t,Transaction>::iterator it;
+  TransTable::iterator it;
   cout << "**************** Transaction Table ****************" << endl;  
   for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end(); ++it){
     std::cout << it->first << std::endl;
@@ -487,7 +487,7 @@ rollback_for_recovery(uint32_t xid){
 static uint64_t
 max_undo_nxt_lsn_offset(){
   uint64_t offset_max = 0;
-  map<uint32_t, Transaction>::iterator it;
+  TransTable::iterator it;
   for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end();it++){
     if(it->second.UndoNxtLSN > offset_max){
       offset_max = it->second.UndoNxtLSN;
@@ -504,7 +504,7 @@ undo(){
     perror("read"); exit(1);
   }
 
-  // map<uint32_t, Transaction>::iterator it;
+  // TransTable::iterator it;
   // for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end();it++){
   //   rollback_for_recovery(it->second.TransID);    
   // }
