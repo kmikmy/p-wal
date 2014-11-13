@@ -68,6 +68,7 @@ typedef std::map<uint32_t, Transaction> TransTable;
  */
 typedef Transaction DistributedTransTable;
 
+#pragma pack(1)
 typedef struct {
   uint32_t LSN;
   uint32_t TransID;
@@ -86,7 +87,7 @@ typedef struct {
   
   char padding[460];
 } Log; /* 512バイト */
-
+#pragma pack()
 
 typedef struct{
   uint64_t count;

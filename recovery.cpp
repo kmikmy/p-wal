@@ -66,6 +66,24 @@ public:
   }
 
   void
+  seek(uint64_t offset){
+    uint32_t nth = (offset - (base_addr+sizeof(LogHeader))) / sizeof(Log); // (Log)*offset is (n+1)th log from head
+
+    /* the next next() calls readLogs() */
+    nlog = 0;
+    idx = 0;
+
+    if (nth >= header.count){
+      rest_nlog = 0;
+      log_ptr = base_addr+sizeof(LogHeader)+sizeof(Log)*header.count;
+      return; // the next next() throws exception.
+    }
+
+    rest_nlog = header.count - nth;
+    log_ptr = offset;
+  }
+
+  void
   term(){
     close(log_fd);
   }
@@ -81,7 +99,7 @@ public:
 
     nlog = (rest_nlog<ALOGBUF_SIZE)?rest_nlog:ALOGBUF_SIZE; //読み込むログの個数を決める
     //    cout << "readLogs: " << nlog << endl;
-    if(nlog == 0){
+    if(nlog <= 0){
       return -1;
     }
     
@@ -151,31 +169,29 @@ dirty_page_table_debug(){
   DirtyPageTable::iterator it;
   cout << "**************** Dirty Page Table ****************" << endl;  
   for(it=dirty_page_table.begin(); it!=dirty_page_table.end(); it++){
-    cout << " * " << (*it).page_id << ": " << (*it).rec_LSN << endl;
+    cout << " * " << (*it).page_id << ": LSN=" << (*it).rec_LSN << ", file_id="<< (*it).log_file_id << ", offset=" << (*it).rec_offset << endl;
   }
   cout << endl;
 }
 
-static uint32_t
-min_recLSN(){
+
+/* 実際にはLSNではなく、最小のオフセットをログファイル毎に求める. */
+static void
+min_recLSNs(uint64_t *min_LSNs){
+  for(int i=0; i<MAX_WORKER_THREAD; i++){
+    min_LSNs[i]=0;
+  }
+
   DirtyPageTable::iterator it = dirty_page_table.begin();
-  if(it == dirty_page_table.end()){
-    return 0;
+  for(; it!=dirty_page_table.end(); it++){
+    if(min_LSNs[it->log_file_id] == 0){
+      min_LSNs[it->log_file_id] = it->rec_offset;
+    }
+    else if (min_LSNs[it->log_file_id] > it->rec_offset) {
+      cout << it->log_file_id << "'s min change into " << it->rec_LSN << endl;
+      min_LSNs[it->log_file_id] = it->rec_offset;
+    }
   }
-
-  uint32_t min_LSN = (*it).rec_LSN;
-#ifdef DEBUG
-  cout << "page_id: " << (*it).page_id << ", LSN: " << (*it).rec_LSN << endl;
-#endif
-
-  for(it++; it!=dirty_page_table.end(); it++){
-#ifdef DEBUG
-    cout << "page_id: " << (*it).page_id << ", LSN: " << (*it).rec_LSN << endl;
-#endif
-    if(min_LSN > (*it).rec_LSN) min_LSN = (*it).rec_LSN;
-  }
-
-  return min_LSN;
 }
 
 
@@ -231,8 +247,8 @@ next_log(AnaLogBuffer *alogs, std::set<int> *flags, Log *log){
 }
 #endif
 
-static uint32_t
-analysis(){
+static void
+analysis(uint64_t* redo_LSNs){
   Log log;
 
 #ifndef FIO
@@ -259,6 +275,8 @@ analysis(){
     int ret = next_log(alogs, &flags, &log);
     if(ret == 0) break;
     
+    // マスターレコードのLSNの復元
+    ARIES_SYSTEM::master_record.system_last_lsn = log.LSN;
     Logger::log_debug(log);
 #endif
 
@@ -331,28 +349,29 @@ analysis(){
   }
 #endif
 
-  return min_recLSN();
+  min_recLSNs(redo_LSNs);
 }
 
 #ifndef FIO
 
 static void
-sequential_redo(uint64_t redo_lsn){
+sequential_redo(uint64_t *redo_LSNs){
   LogHeader lh;
   lseek(log_fd, 0, SEEK_SET);
   if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
     perror("read"); exit(1);
   }
   
-  lseek(log_fd, redo_lsn, SEEK_SET);
+  lseek(log_fd, redo_LSNs[0], SEEK_SET);
   Log log;
-  for(uint32_t i=(uint32_t)(redo_lsn/sizeof(Log));i<lh.count;i++){
+  for(uint32_t i=(uint32_t)(redo_LSNs[0]/sizeof(Log));i<lh.count;i++){
     int ret = next_log(log_fd, &log);
     if(ret == 0)
       break;
 
-#ifdef DEBUG
     Logger::log_debug(log);
+#ifdef DEBUG
+
 #endif
 
     if (log.Type == UPDATE || log.Type == COMPENSATION){
@@ -383,18 +402,81 @@ sequential_redo(uint64_t redo_lsn){
 #else
 
 static void
-parallel_redo(uint64_t redo_lsn){
-  sleep(100);
+parallel_redo(uint64_t *redo_LSNs){
+  Log log;
+
+#ifndef FIO
+  LogHeader lh;
+  lseek(log_fd, 0, SEEK_SET);
+  if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
+    perror("read"); exit(1);
+  }
+  
+  lseek(log_fd, redo_LSNs[0], SEEK_SET);
+
+  for(uint32_t i=(uint32_t)(redo_LSNs[0]/sizeof(Log));i<lh.count;i++){
+    int ret = next_log(log_fd, &log);
+    if(ret == 0)
+      break;
+
+#else
+
+  std::set<int> flags;  
+  AnaLogBuffer alogs[MAX_WORKER_THREAD];
+
+  for(int i=0;i<MAX_WORKER_THREAD;i++){
+    alogs[i].init(i);
+    alogs[i].seek(redo_LSNs[i]);
+    flags.insert(i);
+  }
+
+  while(1){
+    int ret = next_log(alogs, &flags, &log);
+    if(ret == 0) break;
+    
+#endif
+
+    Logger::log_debug(log);
+
+    if (log.Type == UPDATE || log.Type == COMPENSATION){
+      int idx=log.PageID;
+      if(dirty_page_table.contains(idx) && log.LSN >= dirty_page_table[idx].rec_LSN){
+	// redoは並列に行わないのでページへのlockはいらない
+	page_fix(idx, 0);
+      
+	if(page_table[idx].page.page_LSN < log.LSN){
+	  page_table[idx].page.value = log.after;
+	  page_table[idx].page.page_LSN = log.LSN;
+	}
+	else{ /* update dirty page list with correct info. this will happen if this
+		 page was written to disk after the checkpt but before sys failure. */
+	  dirty_page_table[idx].rec_LSN = page_table[idx].page.page_LSN + 1;
+	}
+
+        page_unfix(idx);
+      }
+    }
+  }
+
+#ifdef FIO
+  for(int i=0;i<MAX_WORKER_THREAD;i++){
+    alogs[i].term();
+  }
+#endif
+
+#ifdef DEBUG
+  page_table_debug();
+#endif
 }
 
 #endif
-
+  
 static void 
-redo(uint64_t redo_lsn){
+redo(uint64_t *redo_LSNs){
 #ifndef FIO
-  sequential_redo(redo_lsn);
+  sequential_redo(redo_LSNs);
 #else
-  parallel_redo(redo_lsn);
+  parallel_redo(redo_LSNs);
 #endif 
 }
 
@@ -515,7 +597,9 @@ undo(){
     if(undo_lsn_offset == 0){
       PERR("undo_lsn_offset is 0");
     }
-    
+
+    //    cout << "undo_lsn_offset="  << undo_lsn_offset << endl;
+
     lseek(log_fd, undo_lsn_offset, SEEK_SET);
     int ret = read(log_fd, &log, sizeof(Log));
     if(ret == -1){
@@ -619,12 +703,20 @@ void recovery(){
   if(log_fd == -1){
     perror("open"); exit(1);
   }
-  uint32_t redo_lsn = analysis();
+  uint64_t *redo_LSNs = (uint64_t *)malloc(sizeof(uint64_t)*MAX_WORKER_THREAD);
+  if(redo_LSNs == NULL) PERR("redo_lsn == NULL");
+  analysis(redo_LSNs);
   cout << "done through analysis pass." << endl;
   transaction_table_debug();
   dirty_page_table_debug();
 
-  redo(redo_lsn);
+  for(int i=0;i<MAX_WORKER_THREAD;i++){
+    if(redo_LSNs[i] == 0) continue;
+    cout << i << ": " << redo_LSNs[i] << endl;
+  }
+
+  redo(redo_LSNs);
+  free(redo_LSNs);
   cout << "done through redo pass." << endl;
   page_table_debug();
 

@@ -232,13 +232,15 @@ Logger::current_offset_logfile_for_id(int th_id){
 
 void 
 Logger::log_debug(Log log){
-  std::cout << "LSN: " << log.LSN;
-  std::cout << ", TransID " << log.TransID;
+  std::cout << "Log[" << log.LSN;
+  std::cout << "," << log.offset ;
+  std::cout << "]: TransID: " << log.TransID;
+  std::cout << ", file_id: " << log.file_id;
   std::cout << ", Type: " << log.Type;
   std::cout << ", PageID: " << log.PageID;
   std::cout << ", PrevLSN: " << log.PrevLSN;
   std::cout << ", UndoNxtLSN: " << log.UndoNxtLSN;
-  if(log.Type == UPDATE){
+  if(log.Type == UPDATE || log.Type == COMPENSATION){
     std::cout << ", before: " << log.before;
     std::cout << ", after: " << log.after;
     //    std::cout << ", op.op_type: " << log.op.op_type;
