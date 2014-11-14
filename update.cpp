@@ -213,8 +213,10 @@ end(uint32_t xid, int th_id=0){
 
 
 /*
-  rollback()内ではトランザクションテーブルからエントリを削除しない。
-  Iteratorを使って、トランザクションテーブルを巡回している場合があるため。
+  rollback()内ではトランザクションテーブルからエントリを削除しない.
+  Iteratorを使って、トランザクションテーブルを巡回している場合があるため.
+  rollback中のトランザクションテーブルの更新が不適(2014/11/14現在).
+  recovery.cppのrollback_for_recoveryのコードをコピーする予定.
 */
 void
 rollback(uint32_t xid, int th_id){

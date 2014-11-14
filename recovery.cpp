@@ -565,14 +565,16 @@ rollback_for_recovery(uint32_t xid){
   //  close(log_fd);
 }
 
-
+/* 次にundoすべき最大のLSN値を持つログの"オフセット"を返す(LSNではない). */
 static uint64_t
 max_undo_nxt_lsn_offset(){
   uint64_t offset_max = 0;
+  uint32_t LSN_max = 0;
   TransTable::iterator it;
   for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end();it++){
-    if(it->second.UndoNxtLSN > offset_max){
-      offset_max = it->second.UndoNxtLSN;
+    if(it->second.UndoNxtLSN > LSN_max){
+      LSN_max = it->second.UndoNxtLSN;
+      offset_max = it->second.UndoNxtLSN; // it->second.UndoNxtOffsetになる予定
     }
   }
   
