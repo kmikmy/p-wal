@@ -214,7 +214,7 @@ next_log(AnaLogBuffer *alogs, std::set<int> *flags, Log *log){
   std::set<int>::iterator it;
   std::set<int> del_list;
 
-  min_log.LSN = ~(uint32_t)0; // NOTのビット演算(uint32_tの最大値を求めている)
+  min_log.LSN = ~(uint64_t)0; // NOTのビット演算(uint64_tの最大値を求めている)
   for( it=(*flags).begin(); it!=(*flags).end(); it++){
     try{
       //	cout << *it << endl;
@@ -487,7 +487,7 @@ redo(uint64_t *redo_LSNs){
 */
 void
 rollback_for_recovery(uint32_t xid){
-  uint32_t lsn = recovery_trans_table.at(xid).LastLSN; // rollbackするトランザクションの最後のLSN
+  uint64_t lsn = recovery_trans_table.at(xid).LastLSN; // rollbackするトランザクションの最後のLSN
 
   Log log;
   while(lsn != 0){ // lsnが0になるのはprevLSNが0のBEGINログを処理した後
@@ -569,7 +569,7 @@ rollback_for_recovery(uint32_t xid){
 static uint64_t
 max_undo_nxt_lsn_offset(){
   uint64_t offset_max = 0;
-  uint32_t LSN_max = 0;
+  uint64_t LSN_max = 0;
   TransTable::iterator it;
   for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end();it++){
     if(it->second.UndoNxtLSN > LSN_max){
@@ -595,7 +595,7 @@ undo(){
 
   Log log;
   while(!recovery_trans_table.empty()){ // 現在の実装ではトランザクションテーブルに残っているトランザクションエントリの状態は全て'U'
-    uint32_t undo_lsn_offset = max_undo_nxt_lsn_offset();
+    uint64_t undo_lsn_offset = max_undo_nxt_lsn_offset();
     if(undo_lsn_offset == 0){
       PERR("undo_lsn_offset is 0");
     }

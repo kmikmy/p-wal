@@ -225,7 +225,7 @@ rollback(uint32_t xid, int th_id){
     perror("open"); exit(1);
   }
   
-  uint32_t lsn = dist_trans_table[th_id].LastLSN; // rollbackするトランザクションの最後のLSN
+  uint64_t lsn = dist_trans_table[th_id].LastLSN; // rollbackするトランザクションの最後のLSN
 
   Log log;
   while(lsn != 0){ // lsnが0になるのはprevLSNが0のBEGINログを処理した後

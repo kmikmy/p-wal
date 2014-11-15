@@ -220,7 +220,7 @@ Logger::log_all_flush(){
       logBuffer[i].flush();
 }
 
-uint32_t
+uint64_t
 Logger::read_LSN(){
   return ARIES_SYSTEM::master_record.system_last_lsn;
 }

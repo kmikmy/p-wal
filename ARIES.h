@@ -26,7 +26,7 @@ enum OP_TYPE { NONE, INC,DEC,SUBST };
 enum STATE { U,P,C }; // UNCOMMITED, PREPARED, COMMITED
 
 typedef struct {
-  uint32_t page_LSN;
+  uint64_t page_LSN;
   int pageID;
   int value;  
 } Page;
@@ -50,8 +50,10 @@ typedef struct {
 typedef struct {
   uint32_t TransID;
   STATE State;
-  uint32_t LastLSN;
-  uint32_t UndoNxtLSN;
+  uint64_t LastLSN;
+  uint64_t LastOffset;
+  uint64_t UndoNxtLSN;
+  uint64_t UndoNxtOffset;
 } Transaction;
 
 
@@ -70,22 +72,24 @@ typedef Transaction DistributedTransTable;
 
 #pragma pack(1)
 typedef struct {
-  uint32_t LSN;
+  uint64_t LSN;
+  uint64_t offset;
+  uint64_t PrevLSN;
+  uint64_t Prevoffset;
+  uint64_t UndoNxtLSN;
+  uint64_t UndoNxtOffset;
+  /* ここまでで 48 bytes  */
+
+  int file_id;
   uint32_t TransID;
   LOG_TYPE Type;
-  uint32_t PrevLSN;
-  uint32_t UndoNxtLSN;
   uint32_t PageID;
   int before;
   int after;
   OP op; // 8 bytes
-  /* ここまでで40 bytes */
-
-  int file_id;
-  uint64_t offset;
-  /* ここまでで52 bytes */ 
+  /* ここまでで 80 bytes */
   
-  char padding[460];
+  char padding[432];
 } Log; /* 512バイト */
 #pragma pack()
 
@@ -95,9 +99,9 @@ typedef struct{
 } LogHeader; /**/
 
 typedef struct {
-  uint32_t mr_chkp;
+  uint64_t mr_chkp;
   uint32_t system_xid;
-  uint32_t system_last_lsn;
+  uint64_t system_last_lsn;
   bool last_exit;
 } MasterRecord;
 
@@ -130,7 +134,7 @@ class Logger
   static void log_all_flush();
   static void log_debug(Log log);
   static void init();
-  static uint32_t read_LSN();
+  static uint64_t read_LSN();
   static uint64_t current_offset_logfile_for_id(int th_id);
 };
 

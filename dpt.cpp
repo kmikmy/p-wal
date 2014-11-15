@@ -91,7 +91,7 @@ DirtyPageTable::DirtyPageTable(int capacity) {
 }
 
 void
-DirtyPageTable::add(uint32_t page_id, uint32_t rec_LSN, uint64_t rec_offset, int log_file_id){
+DirtyPageTable::add(uint32_t page_id, uint64_t rec_LSN, uint64_t rec_offset, int log_file_id){
   if(contains(page_id)) return;
   //  printf("called add(%d,%d)\n", page_id,rec_LSN);
 
