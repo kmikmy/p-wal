@@ -26,10 +26,12 @@ pbuf_init(){
     pthread_rwlock_init(&page_table[i].lock, NULL);
     page_table[i].page_id=i;
     page_table[i].fixed_count = 0;
-    if(-1 == read(page_fd, &page_table[i].page, sizeof(Page))){
-      perror("read");
-      exit(1);
-    }
+
+    /* 性能評価のため、コメントアウトしておく. */
+    // if(-1 == read(page_fd, &page_table[i].page, sizeof(Page))){
+    //   perror("read");
+    //   exit(1);
+    // }
     page_table[i].readed_flag=true;
     page_table[i].modified_flag=false;
   }
