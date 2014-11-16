@@ -7,7 +7,7 @@ using namespace std;
 #define LOG_OFFSET (1073741824)
 #ifndef FIO
 #define NUM_MAX_LOGFILE 1
-static const char* log_path = "/work/kamiya/log.dat";
+static const char* log_path = "/dev/fioa";
 #else
 #define NUM_MAX_LOGFILE 50
 static const char* log_path = "/dev/fioa";

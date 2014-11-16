@@ -8,11 +8,11 @@ using namespace std;
 
 /* 
    QUEUEの長さ 
-   一つのキュー当たり最大で 1千万 * 120バイト = 1.2GB のログが書かれる. 
+   一つのキュー当たり最大で MAX_QUEUE_SIZE * 512バイト のログが書かれる.(LogHeaderのサイズは含まない)
    QUEUEがemptyの状態とfullの状態を区別するために、fullの状態は１つ分だけ要素が空いているようにするので、
    キューに入る最大要素+1が実際のキューのサイズとする.
 */
-#define MAX_QUEUE_SIZE 100000 + 1 
+#define MAX_QUEUE_SIZE 1000000 + 1 
 //#define MAX_QUEUE_SIZE 100 + 1 
 
 extern MasterRecord master_record;

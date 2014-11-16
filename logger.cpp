@@ -9,12 +9,14 @@ using namespace std;
 #define CAS128(addr, oldval, newval) __sync_bool_compare_and_swap((__int128_t *)(addr), *(__int128_t *)&(oldval), *(__int128_t *)&(newval))
 // #define DEBUG
 
-#ifndef NUM_GROUP_COMMIT
-#define NUM_GROUP_COMMIT 1
-#endif
+/* 
+   Group Commit の際のパラメータ. Defaultは1.
+   Logger::set_num_group_commit()でセットする.
+*/
+uint32_t num_group_commit = 1; 
 
 #ifndef FIO
-const char* Logger::logpath = "/work/kamiya/log.dat";
+const char* Logger::logpath = "/dev/fioa";
 #else
 const char* Logger::logpath = "/dev/fioa";
 //const char* Logger::logpath = "/dev/shm/kamiya/log.dat";
@@ -206,7 +208,7 @@ Logger::log_write(Log *log, int th_id){
 
   logBuffer[th_id].push(*log);
 
-  if( (log->Type == END && logBuffer[th_id].num_commit == NUM_GROUP_COMMIT ) || logBuffer[th_id].full() ){
+  if( (log->Type == END && logBuffer[th_id].num_commit == num_group_commit ) || logBuffer[th_id].full() ){
     logBuffer[th_id].flush();
   }
 
@@ -249,5 +251,8 @@ Logger::log_debug(Log log){
   std::cout << std::endl;
 }
 
-
+void
+Logger::set_num_group_commit(int group_param){
+  num_group_commit = group_param;
+}
 

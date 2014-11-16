@@ -32,12 +32,14 @@ int main(int argc, char *argv[]){
   if(argc == 1){
     interact_mode();
   }
-  else if(argc == 2){
-    cout << "usage: ./aries num_trans num_threads" << endl;
+  else if(argc < 4){
+    cout << "usage: ./aries num_trans num_threads num_group_commit" << endl;
   }
-  else if(argc == 3){
+  else if(argc == 4){
     int th_num = atoi(argv[2]);
     int cpunum = sysconf(_SC_NPROCESSORS_ONLN);
+    uint32_t group_param = atoi(argv[3]);
+    Logger::set_num_group_commit(group_param);
 
     if(th_num > MAX_WORKER_THREAD){// || th_num > cpunum-1){
       cout << "Usage: ./a.out xact_num th_num(<=" << (MAX_WORKER_THREAD<cpunum?MAX_WORKER_THREAD-1:cpunum-1) << ")" << endl;
