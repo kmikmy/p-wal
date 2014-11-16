@@ -201,7 +201,7 @@ Logger::log_write(Log *log, int th_id){
 
   lao = logBuffer[th_id].next_lsn();
   log->LSN = lao.first;
-  log->offset = lao.second;
+  log->Offset = lao.second;
   log->file_id = th_id;
 
   logBuffer[th_id].push(*log);
@@ -233,7 +233,7 @@ Logger::current_offset_logfile_for_id(int th_id){
 void 
 Logger::log_debug(Log log){
   std::cout << "Log[" << log.LSN;
-  std::cout << "," << log.offset ;
+  std::cout << "," << log.Offset ;
   std::cout << "]: TransID: " << log.TransID;
   std::cout << ", file_id: " << log.file_id;
   std::cout << ", Type: " << log.Type;

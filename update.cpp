@@ -139,7 +139,9 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
   log.PageID = page_id;
 
   log.PrevLSN = dist_trans_table[th_id].LastLSN;
+  log.PrevOffset = dist_trans_table[th_id].LastOffset;
   log.UndoNxtLSN = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
+  log.UndoNxtOffset = 0;
   log.op=op;
   log.before = pbuf->page.value;
 
@@ -157,8 +159,10 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
   pbuf->page.page_LSN = log.LSN;
 
   
-  dist_trans_table[th_id].LastLSN = log.offset;
-  dist_trans_table[th_id].UndoNxtLSN = log.offset; // undoできる非CLRレコードの場合はUndoNxtLSNはLastLSNと同じになる
+  dist_trans_table[th_id].LastLSN = log.LSN;
+  dist_trans_table[th_id].LastOffset = log.Offset;
+  dist_trans_table[th_id].UndoNxtLSN = log.LSN; // undoできる非CLRレコードの場合はUndoNxtLSNはLastLSNと同じになる
+  dist_trans_table[th_id].UndoNxtOffset = log.Offset;
   
   //  cout << "[Before Update]" << endl;
   //  cout << "page[" << p.page_id << "]: page_LSN=" << p.page_LSN << ", value=" << p.value << endl;
@@ -183,7 +187,12 @@ begin(uint32_t xid, int th_id=0){
   Logger::log_write(&log,th_id);
 
   dist_trans_table[th_id].TransID = xid;
-  dist_trans_table[th_id].LastLSN = log.offset;
+  dist_trans_table[th_id].LastLSN = log.LSN;
+  dist_trans_table[th_id].LastOffset = log.Offset;
+  dist_trans_table[th_id].UndoNxtLSN = log.LSN; /* BEGIN レコードは END レコードによってコンペンセーションされる. */
+  dist_trans_table[th_id].LastOffset = log.Offset;
+  
+
 #ifdef DEBUG
   Logger::log_debug(log);  
 #endif
@@ -191,21 +200,20 @@ begin(uint32_t xid, int th_id=0){
 
 void 
 end(uint32_t xid, int th_id=0){
-
-  // if(rand()%3 == 0){ // 33%の確率でENDログがフラッシュされない
-  //   cout << "end log wasn't written." << endl;
-  //   return;
-  // }
-
   Log log;
   memset(&log,0,sizeof(log));
   log.TransID = xid;
   log.Type = END;
   log.PrevLSN = dist_trans_table[th_id].LastLSN;
+  log.PrevOffset = dist_trans_table[th_id].LastOffset;
+  log.UndoNxtLSN = 0; /* 一度 END ログが書かれたトランザクションは undo されることはない */
+  log.UndoNxtOffset = 0; 
 
   Logger::log_write(&log,th_id);
 
-  dist_trans_table[th_id].LastLSN = log.offset;
+  /* dist_transaction_tableのエントリを削除する. */
+  memset(&dist_trans_table[th_id], 0, sizeof(DistributedTransTable));
+
 #ifdef DEBUG
   Logger::log_debug(log);  
 #endif
@@ -225,11 +233,11 @@ rollback(uint32_t xid, int th_id){
     perror("open"); exit(1);
   }
   
-  uint64_t lsn = dist_trans_table[th_id].LastLSN; // rollbackするトランザクションの最後のLSN
+  uint64_t log_offset = dist_trans_table[th_id].LastOffset; // rollbackするトランザクションの最後のLSN
 
   Log log;
-  while(lsn != 0){ // lsnが0になるのはprevLSNが0のBEGINログを処理した後
-    lseek(log_fd, lsn, SEEK_SET);
+  while(log_offset != 0){ // lsnが0になるのはprevLSNが0のBEGINログを処理した後
+    lseek(log_fd, log_offset, SEEK_SET);
 
     int ret = read(log_fd, &log, sizeof(Log));  
     if(ret == -1){
@@ -258,16 +266,21 @@ rollback(uint32_t xid, int th_id){
 
       clog.PageID = log.PageID;
       clog.UndoNxtLSN = log.PrevLSN;
+      clog.UndoNxtOffset = log.PrevOffset;
       // clog.before isn't needed because compensation log record is redo-only.
       clog.after = log.before;
 
       clog.PrevLSN = dist_trans_table[th_id].LastLSN;
+      clog.PrevOffset = dist_trans_table[th_id].LastOffset;
 
 
       // compensation log recordをどこに書くかという問題はひとまず置いておく
       // とりあえず全部id=0のログブロックに書く
       ret = Logger::log_write(&clog, 0); 
       dist_trans_table[th_id].LastLSN = clog.LSN;
+      dist_trans_table[th_id].LastOffset = clog.Offset;
+      dist_trans_table[th_id].UndoNxtLSN = clog.UndoNxtLSN;
+      dist_trans_table[th_id].UndoNxtOffset = clog.UndoNxtOffset;
 
 #ifdef DEBUG
       Logger::log_debug(clog);
@@ -275,28 +288,32 @@ rollback(uint32_t xid, int th_id){
 
     }
     else if(log.Type == COMPENSATION){
-      lsn = log.UndoNxtLSN;
+      log_offset = log.UndoNxtOffset;
       continue;
     }
     else if(log.Type == BEGIN){
-      Log clog;
-      memset(&clog,0,sizeof(Log));
-      clog.Type = COMPENSATION;
-      clog.TransID = log.TransID;
-      // clog.before isn't needed because compensation log record is redo-only.
-      clog.UndoNxtLSN = log.PrevLSN;
+      Log end_log;
+      memset(&end_log,0,sizeof(Log));
+      end_log.Type = END;
+      end_log.TransID = log.TransID;
 
-      clog.PrevLSN = dist_trans_table[th_id].LastLSN;
+      end_log.PrevLSN = dist_trans_table[th_id].LastLSN;
+      end_log.PrevOffset = dist_trans_table[th_id].LastOffset;
+      end_log.UndoNxtLSN = 0;
+      end_log.UndoNxtOffset = 0;
 
-      Logger::log_write(&clog, 0);
-      dist_trans_table[th_id].LastLSN = clog.LSN;
+      Logger::log_write(&end_log, 0);
+
+
 
 #ifdef DEBUG
-      Logger::log_debug(clog);
+      Logger::log_debug(end_log);
 #endif
-      
+
+      /* dist_transaction_tableのエントリを削除する. */
+      memset(&dist_trans_table[th_id], 0, sizeof(DistributedTransTable));    
     }
-    lsn = log.PrevLSN;
+    log_offset = log.Offset;
   }
 
   close(log_fd);

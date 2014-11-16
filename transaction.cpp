@@ -141,4 +141,6 @@ each_operation_mode(){
   } while(m && m!=2);
 
   clear_transaction(0);
+
+  Logger::log_all_flush();
 }

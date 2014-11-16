@@ -80,10 +80,10 @@ int main(){
       }    
       if(len == 0) break;
       
-      cout << "Log[" << log.LSN << ":" << log.offset << "]: TransID=" << log.TransID << ", file_id=" << log.file_id << ", Type=" << log.Type;
+      cout << "Log[" << log.LSN << ":" << log.Offset << "]: TransID=" << log.TransID << ", file_id=" << log.file_id << ", Type=" << log.Type;
       
       if(log.Type != BEGIN && log.Type != END)
-	cout << ", PrevLSN=" << log.PrevLSN << ", UndoNxtLSN=" << log.UndoNxtLSN << ", PageID=" << log.PageID << ", before=" << log.before << ", after=" << log.after << ", op.op_type=" << log.op.op_type << ", op.amount=" << log.op.amount;
+	cout << ", PrevLSN=" << log.PrevLSN << ", PrevOffset=" << log.PrevOffset << ", UndoNxtLSN=" << log.UndoNxtLSN << ", UndoNxtOffset=" << log.UndoNxtOffset << ", PageID=" << log.PageID << ", before=" << log.before << ", after=" << log.after; // << ", op.op_type=" << log.op.op_type << ", op.amount=" << log.op.amount;
 
 
       cout << endl;

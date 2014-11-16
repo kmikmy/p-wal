@@ -73,9 +73,9 @@ typedef Transaction DistributedTransTable;
 #pragma pack(1)
 typedef struct {
   uint64_t LSN;
-  uint64_t offset;
+  uint64_t Offset;
   uint64_t PrevLSN;
-  uint64_t Prevoffset;
+  uint64_t PrevOffset;
   uint64_t UndoNxtLSN;
   uint64_t UndoNxtOffset;
   /* ここまでで 48 bytes  */

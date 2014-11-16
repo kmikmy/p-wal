@@ -175,21 +175,21 @@ dirty_page_table_debug(){
 }
 
 
-/* 実際にはLSNではなく、最小のオフセットをログファイル毎に求める. */
+/* ログファイル毎のredo開始地点を求める. */
 static void
-min_recLSNs(uint64_t *min_LSNs){
+min_recOffsets(uint64_t *min_offsets){
   for(int i=0; i<MAX_WORKER_THREAD; i++){
-    min_LSNs[i]=0;
+    min_offsets[i]=0;
   }
 
   DirtyPageTable::iterator it = dirty_page_table.begin();
   for(; it!=dirty_page_table.end(); it++){
-    if(min_LSNs[it->log_file_id] == 0){
-      min_LSNs[it->log_file_id] = it->rec_offset;
+    if(min_offsets[it->log_file_id] == 0){
+      min_offsets[it->log_file_id] = it->rec_offset;
     }
-    else if (min_LSNs[it->log_file_id] > it->rec_offset) {
+    else if (min_offsets[it->log_file_id] > it->rec_offset) {
       cout << it->log_file_id << "'s min change into " << it->rec_LSN << endl;
-      min_LSNs[it->log_file_id] = it->rec_offset;
+      min_offsets[it->log_file_id] = it->rec_offset;
     }
   }
 }
@@ -207,7 +207,7 @@ next_log(int log_fd, Log *log){
 }
 #else
 static int
-next_log(AnaLogBuffer *alogs, std::set<int> *flags, Log *log){
+next_log(AnaLogBuffer *alogs, std::set<int> *exist_flags, Log *log){
   int min_id;
   Log min_log,tmp_log;
 
@@ -215,7 +215,7 @@ next_log(AnaLogBuffer *alogs, std::set<int> *flags, Log *log){
   std::set<int> del_list;
 
   min_log.LSN = ~(uint64_t)0; // NOTのビット演算(uint64_tの最大値を求めている)
-  for( it=(*flags).begin(); it!=(*flags).end(); it++){
+  for( it=(*exist_flags).begin(); it!=(*exist_flags).end(); it++){
     try{
       //	cout << *it << endl;
       tmp_log = alogs[*it].front();
@@ -232,11 +232,11 @@ next_log(AnaLogBuffer *alogs, std::set<int> *flags, Log *log){
 
   for( it=del_list.begin(); it!=del_list.end(); it++){
     //      cout << "el: " << *it << endl;
-    (*flags).erase((*flags).find(*it));
+    (*exist_flags).erase((*exist_flags).find(*it));
   }
   del_list.clear();
 
-  if((*flags).empty()){ // reached end of all log file.
+  if((*exist_flags).empty()){ // reached end of all log file.
     return 0;
   }
 
@@ -248,7 +248,7 @@ next_log(AnaLogBuffer *alogs, std::set<int> *flags, Log *log){
 #endif
 
 static void
-analysis(uint64_t* redo_LSNs){
+analysis(uint64_t* redo_offsets){
   Log log;
 
 #ifndef FIO
@@ -263,16 +263,16 @@ analysis(uint64_t* redo_LSNs){
     if(ret == 0) break;
 
 #else
-  std::set<int> flags;  
+  std::set<int> exist_flags;  
   AnaLogBuffer alogs[MAX_WORKER_THREAD];
 
   for(int i=0;i<MAX_WORKER_THREAD;i++){
     alogs[i].init(i);
-    flags.insert(i);
+    exist_flags.insert(i);
   }
 
   while(1){
-    int ret = next_log(alogs, &flags, &log);
+    int ret = next_log(alogs, &exist_flags, &log);
     if(ret == 0) break;
     
     // マスターレコードのLSNの復元
@@ -286,22 +286,27 @@ analysis(uint64_t* redo_LSNs){
       Transaction trans;
       trans.TransID = log.TransID;
       trans.State=U;
-      trans.LastLSN=log.offset;
+      trans.LastLSN=log.LSN;
+      trans.LastOffset=log.Offset;
       trans.UndoNxtLSN=0;
+      trans.UndoNxtOffset=0;
       
       recovery_trans_table[trans.TransID] = trans;
       if(ARIES_SYSTEM::master_record.system_xid < trans.TransID)
 	ARIES_SYSTEM::master_record.system_xid = trans.TransID;
     } 
     else if(log.Type == UPDATE || log.Type == COMPENSATION){
-      recovery_trans_table[log.TransID].LastLSN = log.offset;
+      recovery_trans_table[log.TransID].LastLSN = log.LSN;
+      recovery_trans_table[log.TransID].LastOffset = log.Offset;      
 
       if(log.Type == UPDATE){
 	// if(log is undoable)
-	recovery_trans_table[log.TransID].UndoNxtLSN = log.offset;
+	recovery_trans_table[log.TransID].UndoNxtLSN = log.LSN;
+	recovery_trans_table[log.TransID].UndoNxtOffset = log.Offset;
       } 
       else { // log.Type == COMPENSATION
 	recovery_trans_table[log.TransID].UndoNxtLSN = log.UndoNxtLSN;
+	recovery_trans_table[log.TransID].UndoNxtOffset = log.UndoNxtOffset;
       } 
 #ifdef DEBUG
       cout << "log.PageID: " << log.PageID << endl;
@@ -310,7 +315,7 @@ analysis(uint64_t* redo_LSNs){
 #ifdef DEBUG
 	cout << "Added page_id: " << log.PageID << " in D.P.T" << endl;
 #endif
-	dirty_page_table.add(log.PageID, log.LSN, log.offset, log.file_id);
+	dirty_page_table.add(log.PageID, log.LSN, log.Offset, log.file_id);
       }
 
     } // if(log.Type == UPDATE || log.Type == COMPENSATION){
@@ -333,7 +338,9 @@ analysis(uint64_t* redo_LSNs){
     end_log.TransID = *it;
     // clog.before isn't needed because compensation log record is redo-only.
     end_log.UndoNxtLSN = 0; // PrevLSN of BEGIN record must be 0.
+    end_log.UndoNxtOffset = 0;
     end_log.PrevLSN = recovery_trans_table.at(*it).LastLSN; 
+    end_log.PrevOffset = recovery_trans_table.at(*it).LastOffset; 
       
     Logger::log_write(&end_log, 0);
 #ifdef DEBUG
@@ -349,89 +356,42 @@ analysis(uint64_t* redo_LSNs){
   }
 #endif
 
-  min_recLSNs(redo_LSNs);
+  min_recOffsets(redo_offsets);
 }
 
-#ifndef FIO
-
 static void
-sequential_redo(uint64_t *redo_LSNs){
+redo(uint64_t *redo_offsets){
+  Log log;
+
+#ifndef FIO
   LogHeader lh;
   lseek(log_fd, 0, SEEK_SET);
   if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
     perror("read"); exit(1);
   }
   
-  lseek(log_fd, redo_LSNs[0], SEEK_SET);
-  Log log;
-  for(uint32_t i=(uint32_t)(redo_LSNs[0]/sizeof(Log));i<lh.count;i++){
+  lseek(log_fd, redo_offsets[0], SEEK_SET);
+  for(uint32_t i=(uint32_t)(redo_offsets[0]-sizeof(LogHeader))/sizeof(Log);i<lh.count;i++){
+
+
     int ret = next_log(log_fd, &log);
-    if(ret == 0)
+    if(ret == 0){
       break;
-
-    Logger::log_debug(log);
-#ifdef DEBUG
-
-#endif
-
-    if (log.Type == UPDATE || log.Type == COMPENSATION){
-      int idx=log.PageID;
-      if(dirty_page_table.contains(idx) && log.LSN >= dirty_page_table[idx].rec_LSN){
-	// redoは並列に行わないのでページへのlockはいらない
-	page_fix(idx, 0);
-      
-	if(page_table[idx].page.page_LSN < log.LSN){
-	  page_table[idx].page.value = log.after;
-	  page_table[idx].page.page_LSN = log.LSN;
-	}
-	else{ /* update dirty page list with correct info. this will happen if this
-		 page was written to disk after the checkpt but before sys failure. */
-	  dirty_page_table[idx].rec_LSN = page_table[idx].page.page_LSN + 1;
-	}
-
-        page_unfix(idx);
-      }
     }
-  }
-
-#ifdef DEBUG
-  page_table_debug();
-#endif
-}
 
 #else
 
-static void
-parallel_redo(uint64_t *redo_LSNs){
-  Log log;
-
-#ifndef FIO
-  LogHeader lh;
-  lseek(log_fd, 0, SEEK_SET);
-  if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
-    perror("read"); exit(1);
-  }
-  
-  lseek(log_fd, redo_LSNs[0], SEEK_SET);
-
-  for(uint32_t i=(uint32_t)(redo_LSNs[0]/sizeof(Log));i<lh.count;i++){
-    int ret = next_log(log_fd, &log);
-    if(ret == 0)
-      break;
-
-#else
-
-  std::set<int> flags;  
+  std::set<int> exist_flags;  
   AnaLogBuffer alogs[MAX_WORKER_THREAD];
 
   for(int i=0;i<MAX_WORKER_THREAD;i++){
     alogs[i].init(i);
-    alogs[i].seek(redo_LSNs[i]);
-    flags.insert(i);
+    alogs[i].seek(redo_offsets[i]);
+    exist_flags.insert(i);
   }
 
   while(1){
-    int ret = next_log(alogs, &flags, &log);
+    int ret = next_log(alogs, &exist_flags, &log);
     if(ret == 0) break;
     
 #endif
@@ -469,19 +429,9 @@ parallel_redo(uint64_t *redo_LSNs){
 #endif
 }
 
-#endif
-  
-static void 
-redo(uint64_t *redo_LSNs){
-#ifndef FIO
-  sequential_redo(redo_LSNs);
-#else
-  parallel_redo(redo_LSNs);
-#endif 
-}
-
-
 /*
+  [caution]: recoveryではLSNの逆順にundoする必要があるので、このrollbackはrecoveryで使えない。
+
   rollback_for_recovery()内ではトランザクションテーブルからエントリを削除しない。
   Iteratorを使って、トランザクションテーブルを巡回している場合があるため。
 */
@@ -524,15 +474,17 @@ rollback_for_recovery(uint32_t xid){
 
       clog.PageID = log.PageID;
       clog.UndoNxtLSN = log.PrevLSN;
+      clog.UndoNxtOffset = log.PrevOffset;
       // clog.before isn't needed because compensation log record is redo-only.
       clog.after = log.before;
       clog.PrevLSN = recovery_trans_table.at(xid).LastLSN;
+      clog.PrevOffset = recovery_trans_table.at(xid).LastLSN;
 
 
       // compensation log recordをどこに書くかという問題はひとまず置いておく
       // とりあえず全部id=0のログブロックに書く
       ret = Logger::log_write(&clog, 0); 
-      recovery_trans_table[xid].LastLSN = clog.offset;
+      recovery_trans_table[xid].LastLSN = clog.Offset;
 
 #ifdef DEBUG
       Logger::log_debug(clog);
@@ -567,14 +519,16 @@ rollback_for_recovery(uint32_t xid){
 
 /* 次にundoすべき最大のLSN値を持つログの"オフセット"を返す(LSNではない). */
 static uint64_t
-max_undo_nxt_lsn_offset(){
+max_undo_nxt_offset(){
   uint64_t offset_max = 0;
   uint64_t LSN_max = 0;
   TransTable::iterator it;
   for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end();it++){
+    //    cout << "it->first=" << it->first << ", it->second.UndoNxtLSN=" << it->second.UndoNxtLSN << endl;
+
     if(it->second.UndoNxtLSN > LSN_max){
       LSN_max = it->second.UndoNxtLSN;
-      offset_max = it->second.UndoNxtLSN; // it->second.UndoNxtOffsetになる予定
+      offset_max = it->second.UndoNxtOffset;
     }
   }
   
@@ -595,14 +549,14 @@ undo(){
 
   Log log;
   while(!recovery_trans_table.empty()){ // 現在の実装ではトランザクションテーブルに残っているトランザクションエントリの状態は全て'U'
-    uint64_t undo_lsn_offset = max_undo_nxt_lsn_offset();
-    if(undo_lsn_offset == 0){
-      PERR("undo_lsn_offset is 0");
+    uint64_t undo_nxt_offset = max_undo_nxt_offset();
+    if(undo_nxt_offset == 0){
+      PERR("undo_nxt_offset is 0");
     }
 
-    //    cout << "undo_lsn_offset="  << undo_lsn_offset << endl;
+    cout << "undo_nxt_offset="  << undo_nxt_offset << endl;
 
-    lseek(log_fd, undo_lsn_offset, SEEK_SET);
+    lseek(log_fd, undo_nxt_offset, SEEK_SET);
     int ret = read(log_fd, &log, sizeof(Log));
     if(ret == -1){
       PERR("read");
@@ -618,7 +572,6 @@ undo(){
       int idx=log.PageID;
       
       page_table[idx].page.value = log.before;
-      page_table[idx].page.page_LSN = log.LSN; 
 
       Log clog;
       memset(&clog,0,sizeof(Log));
@@ -626,17 +579,24 @@ undo(){
       clog.TransID = log.TransID;
       clog.PageID = log.PageID;
       clog.UndoNxtLSN = log.PrevLSN;
-      /* clog.before isn't needed to store "before value" because compensation log record is redo-only. but, for visibility it is stored. */
+      clog.UndoNxtOffset = log.PrevOffset;
+      /* clog.before isn't needed to store "before value" because compensation log record is redo-only. but, it is stored for visibility. */
       clog.before = log.after;
       clog.after = log.before;
       clog.PrevLSN = recovery_trans_table[log.TransID].LastLSN;
+      clog.PrevOffset = recovery_trans_table[log.TransID].LastOffset;
 
       // compensation log recordをどこに書くかという問題はひとまず置いておく
       // とりあえず全部id=0のログブロックに書く
       ret = Logger::log_write(&clog, 0); 
 
-      recovery_trans_table[log.TransID].LastLSN = clog.offset;
+      page_table[idx].page.page_LSN = clog.LSN; 
+
+      recovery_trans_table[log.TransID].LastLSN = clog.LSN;
+      recovery_trans_table[log.TransID].LastOffset = clog.Offset;
+
       recovery_trans_table[log.TransID].UndoNxtLSN = log.PrevLSN;
+      recovery_trans_table[log.TransID].UndoNxtOffset = log.PrevOffset;
 
 #ifdef DEBUG
       Logger::log_debug(clog);
@@ -645,6 +605,7 @@ undo(){
     }
     else if(log.Type == COMPENSATION){
       recovery_trans_table[log.TransID].UndoNxtLSN = log.UndoNxtLSN;
+      recovery_trans_table[log.TransID].UndoNxtOffset = log.UndoNxtOffset;
     }
     else if(log.Type == BEGIN){
       Log clog;
@@ -652,7 +613,9 @@ undo(){
       clog.Type = END;
       clog.TransID = log.TransID;
       clog.UndoNxtLSN = log.PrevLSN; // PrevLSN of BEGIN record must be 0.
+      clog.UndoNxtLSN = log.PrevOffset;
       clog.PrevLSN = recovery_trans_table[log.TransID].LastLSN; 
+      clog.PrevOffset = recovery_trans_table[log.TransID].LastOffset; 
       
       Logger::log_write(&clog, 0);
 #ifdef DEBUG
@@ -705,20 +668,22 @@ void recovery(){
   if(log_fd == -1){
     perror("open"); exit(1);
   }
-  uint64_t *redo_LSNs = (uint64_t *)malloc(sizeof(uint64_t)*MAX_WORKER_THREAD);
-  if(redo_LSNs == NULL) PERR("redo_lsn == NULL");
-  analysis(redo_LSNs);
+  uint64_t *redo_offsets = (uint64_t *)malloc(sizeof(uint64_t)*MAX_WORKER_THREAD);
+  if(redo_offsets == NULL) PERR("redo_lsn == NULL");
+  analysis(redo_offsets);
   cout << "done through analysis pass." << endl;
   transaction_table_debug();
   dirty_page_table_debug();
 
+  cout << "**************** redo_offsets ****************" << endl;
   for(int i=0;i<MAX_WORKER_THREAD;i++){
-    if(redo_LSNs[i] == 0) continue;
-    cout << i << ": " << redo_LSNs[i] << endl;
+    if(redo_offsets[i] == 0) continue;
+    cout << i << ": " << redo_offsets[i] << endl;
   }
+  cout << endl;
 
-  redo(redo_LSNs);
-  free(redo_LSNs);
+  redo(redo_offsets);
+  free(redo_offsets);
   cout << "done through redo pass." << endl;
   page_table_debug();
 
