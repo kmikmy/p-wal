@@ -1,6 +1,7 @@
 #include "ARIES.h"
 #include <iostream>
 #include <utility>
+#include <sys/time.h>
 
 using namespace std;
 
@@ -36,12 +37,14 @@ class LogBuffer{
   unsigned idx;
   int log_fd;
   off_t base_addr;
-  LogHeader header;
   int th_id;
+  int double_buffer_flag; // this flag's value is 0 or 1.
 
  public:
-  Log logs[MAX_LOG_SIZE];
-  std::mutex log_mtx;
+  Log logs[2][MAX_LOG_SIZE];
+  LogHeader header;
+  std::mutex mtx_for_insert;
+  std::mutex mtx_for_write;
   unsigned num_commit;
 
   LogBuffer(){
@@ -53,7 +56,7 @@ class LogBuffer{
   clear(){
     idx=0;
     num_commit=0;
-    memset(logs,0,sizeof(logs));
+    //    memset(logs,0,sizeof(logs));
   }
 
   off_t
@@ -66,6 +69,7 @@ class LogBuffer{
   init(int _th_id)
   {
     th_id = _th_id;
+    double_buffer_flag = 0;
     base_addr = (off_t)th_id * LOG_OFFSET;
     lseek(log_fd, base_addr, SEEK_SET);
     int ret = read(log_fd, &header, sizeof(LogHeader));
@@ -78,10 +82,10 @@ class LogBuffer{
     logHeaderはbase_addrに位置し、Logがその後に続く
    */
   void 
-  flush()
+  flush(int flag, LogHeader header, size_t nlog)
   {
     uint64_t save_count = header.count;
-    header.count += size();
+    header.count += nlog;
 
     lseek(log_fd, base_addr, SEEK_SET);
     if(-1 == write(log_fd, &header, sizeof(LogHeader))){;
@@ -93,15 +97,19 @@ class LogBuffer{
     lseek(log_fd, pos, SEEK_SET);
     // lseek(log_fd, 0, SEEK_END);
     // fusionではSEEK_ENDできない
-
-    write(log_fd, logs, sizeof(Log)*size());  
+    
+    write(log_fd, logs[flag], sizeof(Log)*nlog);  
 
     // std::cout << "LogBuffer[" << th_id << "] flush " << size() << " logs from " << pos << "." << std::endl;
     
-    clear();
+    //    clear();
   }
 
-  size_t size(){
+
+  int getDoubleBufferFlag(){
+    return double_buffer_flag;
+  }
+  size_t getSize(){
     return idx;
   }
   bool full(){
@@ -111,12 +119,12 @@ class LogBuffer{
     return idx == 0;
   }
   void push(const Log &log){
-    if(size() >= MAX_LOG_SIZE){
+    if(getSize() >= MAX_LOG_SIZE){
       perror("push");
       exit(1);
     }
 
-    logs[idx] = log;
+    logs[double_buffer_flag][idx] = log;
     idx++;
 
     if(log.Type == END)
@@ -129,7 +137,7 @@ class LogBuffer{
     LSN_and_Offset ret;
     off_t pos;
     
-    pos = base_addr + sizeof(LogHeader) + (header.count + size()) * sizeof(Log);
+    pos = base_addr + sizeof(LogHeader) + (header.count + getSize()) * sizeof(Log);
     ret.second = pos;
 
 #ifndef FIO
@@ -150,8 +158,13 @@ class LogBuffer{
   
   uint64_t
   next_offset(){
-    uint64_t pos = base_addr + sizeof(LogHeader) + (header.count + size()) * sizeof(Log);
+    uint64_t pos = base_addr + sizeof(LogHeader) + (header.count + getSize()) * sizeof(Log);
     return pos;
+  }
+
+  void
+  toggle_buffer(){
+    double_buffer_flag = double_buffer_flag?0:1; 
   }
 
 };
@@ -197,7 +210,7 @@ Logger::log_write(Log *log, int th_id){
 #ifndef FIO
   th_id = 0;
 #endif
-  std::lock_guard<std::mutex> lock(logBuffer[th_id].log_mtx);  
+  logBuffer[th_id].mtx_for_insert.lock();  
 
   LSN_and_Offset lao;
 
@@ -209,9 +222,26 @@ Logger::log_write(Log *log, int th_id){
   logBuffer[th_id].push(*log);
 
   if( (log->Type == END && logBuffer[th_id].num_commit == num_group_commit ) || logBuffer[th_id].full() ){
-    logBuffer[th_id].flush();
+
+    int tmp_flag = logBuffer[th_id].getDoubleBufferFlag();
+    LogHeader tmp_header = logBuffer[th_id].header;
+    size_t tmp_size = logBuffer[th_id].getSize();
+
+    /* ログバッファを切り替えて、ヘッダを更新 */
+    logBuffer[th_id].toggle_buffer();
+    logBuffer[th_id].header.count += tmp_size;
+    logBuffer[th_id].clear(); // idxとnum_commitの値を初期化する
+
+    logBuffer[th_id].mtx_for_write.lock();
+    logBuffer[th_id].mtx_for_insert.unlock();  
+
+    logBuffer[th_id].flush(tmp_flag, tmp_header, tmp_size);
+    logBuffer[th_id].mtx_for_write.unlock();
+
+    return 0;
   }
 
+  logBuffer[th_id].mtx_for_insert.unlock();  
   return 0;
 }
 
@@ -219,7 +249,7 @@ void
 Logger::log_all_flush(){
   for(int i=0;i<MAX_WORKER_THREAD;i++)
     if(!logBuffer[i].empty())
-      logBuffer[i].flush();
+      logBuffer[i].flush(logBuffer[i].getDoubleBufferFlag(), logBuffer[i].header, logBuffer[i].getSize());
 }
 
 uint64_t
