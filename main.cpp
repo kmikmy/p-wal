@@ -9,14 +9,14 @@ using namespace std;
 extern void batch_start_transaction(int);
 extern pthread_t gen_producer_thread(int _ntrans, int _nqueue);
 extern void gen_worker_thread(int _nthread);
-extern void each_operation_mode();
+extern void each_operation_mode(int file_id);
 
 extern MasterRecord master_record;
 extern TransTable trans_table;
 extern char *ARIES_HOME;
 
 static void fixed_thread_mode(int n, int nthread);
-static void interact_mode();
+static void interact_mode(int file_id);
 
 std::istream& operator>>( std::istream& is, Mode& i )
 {
@@ -30,7 +30,11 @@ int main(int argc, char *argv[]){
   ARIES_HOME =  getenv("ARIES_HOME");
 
   if(argc == 1){
-    interact_mode();
+    interact_mode(0);
+  }
+  else if(argc == 2){
+    int file_id = atoi(argv[1]);
+    interact_mode(file_id);
   }
   else if(argc < 4){
     cout << "usage: ./aries num_trans num_threads num_group_commit" << endl;
@@ -67,8 +71,9 @@ fixed_thread_mode(int n,int nthread){
   ARIES_SYSTEM::normal_exit();
 }
 
+/* ログを書き込むファイルIDを引数に受け取る */
 static
-void interact_mode(){
+void interact_mode(int file_id){
 
   ARIES_SYSTEM::db_init(1);
 
@@ -90,7 +95,7 @@ void interact_mode(){
     case T_START: batch_start_transaction(1); break;
     case NORMAL_EXIT: ARIES_SYSTEM::normal_exit(); exit(0);
     case FAILURE: ARIES_SYSTEM::abnormal_exit(); exit(0);
-    case EACH_OPERATION: each_operation_mode(); break;
+    case EACH_OPERATION: each_operation_mode(file_id); break;
     default: cout << "The mode isn't exist: " << m << endl; 
     }
   } while(m);

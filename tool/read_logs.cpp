@@ -66,7 +66,7 @@ int main(){
     if(lh.count == 0) continue;
 
 #ifdef FIO
-    printf("###   LogFile(%d)   ###\n",i);
+    printf("\n###   LogFile(%d)   ###\n",i);
 #endif
 
     cout << "the number of logs is " << lh.count << "" << endl;  

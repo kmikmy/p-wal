@@ -111,16 +111,16 @@ batch_start_transaction(int num){
 }
 
 void
-each_operation_mode(){
+each_operation_mode(int file_id){
   Transaction trans;
   OP op;
   uint32_t page_id;
   int  m;
 
   construct_transaction(&trans);
-  append_transaction(trans, 0);
+  append_transaction(trans, file_id);
 
-  begin(trans.TransID,0);
+  begin(trans.TransID,file_id);
   do {
     cout << "[UPDATE]:1, [END]:2, [EXIT]:0 ?" ;
     cin >> m;
@@ -129,10 +129,10 @@ each_operation_mode(){
     case 1:
       operation_select(&op);
       page_select(&page_id);
-      WAL_update(op, trans.TransID, page_id, 0);
+      WAL_update(op, trans.TransID, page_id, file_id);
       break;
     case 2: 
-      end(trans.TransID,0);
+      end(trans.TransID,file_id);
       break;
     case 0: 
       break;
@@ -140,7 +140,7 @@ each_operation_mode(){
     }
   } while(m && m!=2);
 
-  clear_transaction(0);
+  clear_transaction(file_id);
 
   Logger::log_all_flush();
 }

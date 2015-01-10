@@ -60,13 +60,13 @@ void init(){
   close(fd);
 
 #ifndef FIO
-  if( (fd = open(log_path, O_WRONLY | O_TRUNC | O_CREAT , 0666)) == -1 ){  
+  if( (fd = open(log_path, O_WRONLY)) == -1 ){  
     perror("open");
     exit(1);
   }
 #endif
 #ifdef FIO
-  if( (fd = open(log_path, O_WRONLY , 0666)) == -1 ){  
+  if( (fd = open(log_path, O_WRONLY)) == -1 ){  
     perror("open");
     exit(1);
   }
