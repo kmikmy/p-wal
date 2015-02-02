@@ -22,7 +22,7 @@
 
 
 enum LOG_TYPE { UPDATE, COMPENSATION, PREPARE, BEGIN, END, OSfile_return};
-enum OP_TYPE { NONE, INC,DEC,SUBST };
+enum OP_TYPE { NONE, INC,DEC,SUBST,READ };
 enum STATE { U,P,C }; // UNCOMMITED, PREPARED, COMMITED
 
 typedef struct {

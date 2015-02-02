@@ -6,6 +6,7 @@
 #include <sched.h>
 #include <map>
 #include <set>
+#include <algorithm>
 
 #define EX1
 //#define EX10
@@ -79,10 +80,12 @@ start_transaction(uint32_t xid, int th_id)
 #endif
 
   for(int i=0;i<update_num;i++){
+    //    ops[i].op_type = READ;
     operation_select(&ops[i]);
     page_select(&page_ids[i]);
   }
-  
+  sort(page_ids, page_ids+update_num); // デッドロックを起こさないようにするため、昇順にページを選択する
+
   //  cout << "th_transaction: " << xid << endl;
   // transactionがrollbackしたら何度でも繰り返す
   while(update_operations(xid, ops, page_ids, update_num, th_id) == -1){
