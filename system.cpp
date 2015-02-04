@@ -7,6 +7,7 @@
 #include <iostream>
 #include <exception>
 #include <pthread.h>
+#include <fstream>
 
 #define CAS(addr, oldval, newval) __sync_bool_compare_and_swap(addr, oldval, newval)
 #define CAS64(addr, oldval, newval) __sync_bool_compare_and_swap((long *)addr, *(long *)&oldval, *(long *)&newval
@@ -16,6 +17,8 @@
 using namespace std;
 
 MasterRecord ARIES_SYSTEM::master_record;
+extern uint64_t cas_miss[MAX_WORKER_THREAD];
+
 
 extern TransTable recovery_trans_table;
 extern DistributedTransTable *dist_trans_table;
@@ -127,6 +130,25 @@ ARIES_SYSTEM::normal_exit()
     perror("write");
     exit(1);
   };
+
+#ifdef ANALYSIS
+  uint64_t total_cas_miss=0;
+  for(int i=0;i<MAX_WORKER_THREAD;i++){
+    total_cas_miss += cas_miss[i];
+  }
+  std::ofstream ofs("cas_missed.csv", std::ios::out | std::ios::app);
+  ofs << total_cas_miss << ",";
+  
+  pid_t pid;
+  char buf[128];
+  pid = getpid();
+
+  snprintf(buf, sizeof(buf), "cat /proc/%d/status | grep '^voluntary_ctxt_switches' | awk '{print $2}' | tr '\n' ',' >> voluntary_ctxt_switches.csv", pid);
+  system(buf);
+  
+  snprintf(buf, sizeof(buf), "cat /proc/%d/status | grep nonvoluntary_ctxt_switches | awk '{print $2}' | tr '\n' ',' >> nonvoluntary_ctxt_switches.csv", pid);
+  system(buf);
+#endif
 
   return 1;
 }

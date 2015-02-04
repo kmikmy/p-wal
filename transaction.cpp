@@ -8,8 +8,8 @@
 #include <set>
 #include <algorithm>
 
-#define EX1
-//#define EX10
+//#define EX1
+#define EX10
 // #define EX46
 
 #define DEBUG 1
@@ -73,15 +73,22 @@ start_transaction(uint32_t xid, int th_id)
 
 #ifdef EX1
   update_num = 1;
-#elif EX10
+#endif
+#ifdef EX10
   update_num = 10;
-#elif EX46
+#endif
+#ifdef EX46
   update_num = 46;
 #endif
 
   for(int i=0;i<update_num;i++){
-    //    ops[i].op_type = READ;
-    operation_select(&ops[i]);
+    // if(i&1){
+    //   ops[i].op_type = READ;
+    // } else {
+    //   operation_select(&ops[i]);
+    // }
+    ops[i].op_type = READ;
+    //operation_select(&ops[i]);
     page_select(&page_ids[i]);
   }
   sort(page_ids, page_ids+update_num); // デッドロックを起こさないようにするため、昇順にページを選択する

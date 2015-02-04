@@ -15,6 +15,7 @@ using namespace std;
    Logger::set_num_group_commit()でセットする.
 */
 uint32_t num_group_commit = 1; 
+uint64_t cas_miss[MAX_WORKER_THREAD];
 
 #ifndef FIO
 const char* Logger::logpath = "/dev/fioa";
@@ -33,7 +34,7 @@ typedef pair<off_t, off_t> LSN_and_Offset;
 */
 class LogBuffer{
  private:
-  static const unsigned MAX_LOG_SIZE=128;
+  static const unsigned MAX_LOG_SIZE=256;
   unsigned idx;
   int log_fd;
   off_t base_addr;
@@ -148,7 +149,11 @@ class LogBuffer{
     do {
       old = ARIES_SYSTEM::master_record.system_last_lsn;
       new_val = old+1;
-    }while(!CAS(&ARIES_SYSTEM::master_record.system_last_lsn, old, new_val));
+      if(CAS(&ARIES_SYSTEM::master_record.system_last_lsn, old, new_val))
+	break;
+      else
+	cas_miss[th_id]++;
+    }while(1);
     
     ret.first = new_val;
 #endif    
@@ -177,6 +182,7 @@ std::ostream& operator<<( std::ostream& os, OP_TYPE& opt){
   case INC: os << "INC"; break;
   case DEC: os << "DEC"; break;
   case SUBST: os << "SUBST"; break;
+  case READ: os << "READ"; break;
   }
 
   return os;

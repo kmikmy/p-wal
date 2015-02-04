@@ -52,7 +52,8 @@ operation_select(OP *op){
 
 void
 page_select(uint32_t *page_id){
-  *page_id = rand() % PAGE_N;
+  *page_id = (uint32_t)PAGE_N*((double)rand()/((double)RAND_MAX+1.0));
+
 }
 
 static void
@@ -87,7 +88,12 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
       struct timeval s,t;
       gettimeofday(&s,NULL);
       while(1){
-	if(pthread_rwlock_trywrlock(&pbuf->lock) == 0) break; // 書き込みロックの獲得に成功したらbreakする。
+
+	if(op.op_type == READ){
+	  if(pthread_rwlock_tryrdlock(&pbuf->lock) == 0) break; // 読み込みロックの獲得に成功したらbreakする。
+	} else {
+	  if(pthread_rwlock_trywrlock(&pbuf->lock) == 0) break; // 書き込みロックの獲得に成功したらbreakする。
+	}
 	/*
 	  開始時からの経過時間の計測.
 	  δ以上経過してたら、打ち切ってロールバックする.
