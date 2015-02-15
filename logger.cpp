@@ -2,6 +2,7 @@
 #include <iostream>
 #include <utility>
 #include <sys/time.h>
+#include <unistd.h>
 
 using namespace std;
 
@@ -42,15 +43,17 @@ class LogBuffer{
   int double_buffer_flag; // this flag's value is 0 or 1.
 
  public:
-  Log logs[2][MAX_LOG_SIZE];
-  LogHeader header;
+  //  Log logs[2][MAX_LOG_SIZE];
+  Log *logs[2];
+  //  LogHeader *header;
+  LogHeader *header;
   std::mutex mtx_for_insert;
   std::mutex mtx_for_write;
   unsigned num_commit;
 
   LogBuffer(){
     clear();
-    log_fd = open(Logger::logpath, O_CREAT | O_RDWR | O_SYNC, 0666);
+    log_fd = open(Logger::logpath, O_CREAT | O_RDWR | O_DIRECT, 0666);
   }
 
   void
@@ -73,7 +76,21 @@ class LogBuffer{
     double_buffer_flag = 0;
     base_addr = (off_t)th_id * LOG_OFFSET;
     lseek(log_fd, base_addr, SEEK_SET);
-    int ret = read(log_fd, &header, sizeof(LogHeader));
+
+    if ((posix_memalign((void **) &logs[0], 512, sizeof(Log)*MAX_LOG_SIZE)) != 0) {
+      fprintf(stderr, "posix_memalign failed\n");
+      exit(1);
+    }
+    if ((posix_memalign((void **) &logs[1], 512, sizeof(Log)*MAX_LOG_SIZE)) != 0) {
+      fprintf(stderr, "posix_memalign failed\n");
+      exit(1);
+    }
+
+    if ((posix_memalign((void **) &header, 512, sizeof(LogHeader))) != 0) {
+      fprintf(stderr, "posix_memalign failed\n");
+      exit(1);
+    }
+    int ret = read(log_fd, header, sizeof(LogHeader));
     if(-1 == ret){
       perror("read"); exit(1);
     }
@@ -83,14 +100,14 @@ class LogBuffer{
     logHeaderはbase_addrに位置し、Logがその後に続く
    */
   void 
-  flush(int flag, LogHeader header, size_t nlog)
+  flush(int flag, LogHeader *header, size_t nlog)
   {
-    uint64_t save_count = header.count;
-    header.count += nlog;
+    uint64_t save_count = header->count;
+    header->count += nlog;
 
     lseek(log_fd, base_addr, SEEK_SET);
-    if(-1 == write(log_fd, &header, sizeof(LogHeader))){;
-      perror("write"); exit(1);
+    if(-1 == write(log_fd, header, sizeof(LogHeader))){;
+      perror("write(LogHeader)"); exit(1);
     }
 
     off_t pos = base_addr + sizeof(LogHeader) + (save_count * sizeof(Log));
@@ -99,7 +116,10 @@ class LogBuffer{
     // lseek(log_fd, 0, SEEK_END);
     // fusionではSEEK_ENDできない
     
-    write(log_fd, logs[flag], sizeof(Log)*nlog);  
+    if(-1 == write(log_fd, logs[flag], sizeof(Log)*nlog)){
+      perror("write(Log)"); exit(1);
+    }
+    fsync(log_fd);
 
     // std::cout << "LogBuffer[" << th_id << "] flush " << size() << " logs from " << pos << "." << std::endl;
     
@@ -138,7 +158,7 @@ class LogBuffer{
     LSN_and_Offset ret;
     off_t pos;
     
-    pos = base_addr + sizeof(LogHeader) + (header.count + getSize()) * sizeof(Log);
+    pos = base_addr + sizeof(LogHeader) + (header->count + getSize()) * sizeof(Log);
     ret.second = pos;
 
 #ifndef FIO
@@ -163,7 +183,7 @@ class LogBuffer{
   
   uint64_t
   next_offset(){
-    uint64_t pos = base_addr + sizeof(LogHeader) + (header.count + getSize()) * sizeof(Log);
+    uint64_t pos = base_addr + sizeof(LogHeader) + (header->count + getSize()) * sizeof(Log);
     return pos;
   }
 
@@ -230,12 +250,21 @@ Logger::log_write(Log *log, int th_id){
   if( (log->Type == END && logBuffer[th_id].num_commit == num_group_commit ) || logBuffer[th_id].full() ){
 
     int tmp_flag = logBuffer[th_id].getDoubleBufferFlag();
-    LogHeader tmp_header = logBuffer[th_id].header;
+    //    LogHeader *tmp_header = logBuffer[th_id].header;
+    LogHeader *tmp_header;
     size_t tmp_size = logBuffer[th_id].getSize();
+
+    if ((posix_memalign((void **) &tmp_header, 512, sizeof(LogHeader))) != 0)
+      {
+        fprintf(stderr, "posix_memalign failed\n");
+	exit(1);
+      }
+
+    *tmp_header = *(logBuffer[th_id].header);
 
     /* ログバッファを切り替えて、ヘッダを更新 */
     logBuffer[th_id].toggle_buffer();
-    logBuffer[th_id].header.count += tmp_size;
+    logBuffer[th_id].header->count += tmp_size;
     logBuffer[th_id].clear(); // idxとnum_commitの値を初期化する
 
     logBuffer[th_id].mtx_for_write.lock();

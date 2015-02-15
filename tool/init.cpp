@@ -82,8 +82,13 @@ void init(){
 
     lseek(fd, base, SEEK_SET);
 
-    LogHeader lh = {0};
-    if(-1 == write(fd, &lh, sizeof(lh))){
+    LogHeader* lh;
+    if ((posix_memalign((void **) &lh, 512, sizeof(LogHeader))) != 0)
+      {
+        fprintf(stderr, "posix_memalign failed\n");
+	exit(1);
+      }
+    if(-1 == write(fd, lh, sizeof(LogHeader))){
       perror("write");
       exit(1);
     }
