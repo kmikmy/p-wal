@@ -49,7 +49,7 @@ int main(){
   int fd;
   uint32_t total=0;
 
-  if( (fd = open(log_path,  O_RDONLY )) == -1){
+  if( (fd = open(log_path,  O_RDONLY)) == -1){
     perror("open");
     exit(1);
   }
@@ -59,31 +59,45 @@ int main(){
     off_t base=(off_t)i*LOG_OFFSET;
 
     lseek(fd, base, SEEK_SET);
-    LogHeader lh;
-    if(read(fd, &lh, sizeof(LogHeader)) == -1){
+
+    LogHeader* lh;
+    if ((posix_memalign((void **) &lh, 512, sizeof(LogHeader))) != 0)
+      {
+        fprintf(stderr, "posix_memalign failed\n");
+	exit(1);
+      }
+    if(read(fd, lh, sizeof(LogHeader)) == -1){
       perror("read"); exit(1);
     }
-    if(lh.count == 0) continue;
+    if(lh->count == 0) continue;
 
 #ifdef FIO
     printf("\n###   LogFile(%d)   ###\n",i);
 #endif
 
-    cout << "the number of logs is " << lh.count << "" << endl;  
-    total+=lh.count;
+    cout << "the number of logs is " << lh->count << "" << endl;  
+    total+=lh->count;
+
+    Log *log;
+    if ((posix_memalign((void **) &log, 512, sizeof(LogHeader))) != 0)
+      {
+        fprintf(stderr, "posix_memalign failed\n");
+	exit(1);
+      }
+
     
-    for(unsigned i=0;i<lh.count;i++){
-      Log log;
+    for(unsigned i=0;i<lh->count;i++){
+
       int len;
-      if((len = read(fd, &log, sizeof(Log))) == -1){
+      if((len = read(fd, log, sizeof(Log))) == -1){
 	perror("read"); exit(1);
       }    
       if(len == 0) break;
       
-      cout << "Log[" << log.LSN << ":" << log.Offset << "]: TransID=" << log.TransID << ", file_id=" << log.file_id << ", Type=" << log.Type;
+      cout << "Log[" << log->LSN << ":" << log->Offset << "]: TransID=" << log->TransID << ", file_id=" << log->file_id << ", Type=" << log->Type;
       
-      if(log.Type != BEGIN && log.Type != END)
-	cout << ", PrevLSN=" << log.PrevLSN << ", PrevOffset=" << log.PrevOffset << ", UndoNxtLSN=" << log.UndoNxtLSN << ", UndoNxtOffset=" << log.UndoNxtOffset << ", PageID=" << log.PageID << ", before=" << log.before << ", after=" << log.after; // << ", op.op_type=" << log.op.op_type << ", op.amount=" << log.op.amount;
+      if(log->Type != BEGIN && log->Type != END)
+	cout << ", PrevLSN=" << log->PrevLSN << ", PrevOffset=" << log->PrevOffset << ", UndoNxtLSN=" << log->UndoNxtLSN << ", UndoNxtOffset=" << log->UndoNxtOffset << ", PageID=" << log->PageID << ", before=" << log->before << ", after=" << log->after; // << ", op.op_type=" << log->op.op_type << ", op.amount=" << log-op.amount;
 
 
       cout << endl;
