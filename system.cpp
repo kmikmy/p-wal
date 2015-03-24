@@ -14,6 +14,8 @@
 #define CAS128(addr, oldval, newval) __sync_bool_compare_and_swap((__int128_t *)(addr), *(__int128_t *)&(oldval), *(__int128_t *)&(newval))
 #define _DEBUG
 
+//#define ANALYSIS
+
 using namespace std;
 
 MasterRecord ARIES_SYSTEM::master_record;

@@ -8,8 +8,8 @@
 #include <set>
 #include <algorithm>
 
-//#define EX1
-#define EX10
+#define EX1
+//#define EX10
 // #define EX46
 
 #define DEBUG 1

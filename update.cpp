@@ -7,6 +7,8 @@
 #include <sys/time.h>
 #include <pthread.h>
 
+// #define READ_MODE 1
+
 using namespace std;
 
 enum UP_OPTYPE { _EXIT, _INC, _DEC, _SUBST, _SYSTEM_FAILURE };
@@ -70,7 +72,9 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
   OP op;
   uint32_t page_id;
   
+#ifndef READ_MODE
   begin(xid, th_id);  // begin log write  
+#endif
   for(int i=0;i<update_num;i++){
     op = ops[i];
     page_id = page_ids[i];
@@ -126,8 +130,9 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
     }
     // usleep(100);
   }
+#ifndef READ_MODE
   end(xid, th_id); // end log write
-
+#endif
   lock_release(my_lock_table);
 
   return 0;
