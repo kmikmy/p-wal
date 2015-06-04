@@ -44,8 +44,8 @@ void init(){
   cout << "chkp:" <<  master_record.mr_chkp << ", xid:" << master_record.system_xid << ", last_exit:" << std::boolalpha << master_record.last_exit << endl;
 
   master_record.mr_chkp=0;
-  master_record.system_xid=0;
-  master_record.system_last_lsn=0;
+  master_record.system_xid=1;
+  master_record.system_last_lsn=1; // fetch_and_addを使う
   master_record.last_exit=true;
 
   cout << "[after init]" << endl;

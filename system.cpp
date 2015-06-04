@@ -9,9 +9,6 @@
 #include <pthread.h>
 #include <fstream>
 
-#define CAS(addr, oldval, newval) __sync_bool_compare_and_swap(addr, oldval, newval)
-#define CAS64(addr, oldval, newval) __sync_bool_compare_and_swap((long *)addr, *(long *)&oldval, *(long *)&newval
-#define CAS128(addr, oldval, newval) __sync_bool_compare_and_swap((__int128_t *)(addr), *(__int128_t *)&(oldval), *(__int128_t *)&(newval))
 #define _DEBUG
 
 //#define ANALYSIS
@@ -83,26 +80,8 @@ ARIES_SYSTEM::db_init(int th_num){
   create_dist_trans_table(th_num);
 }
 
-
-
-
 uint32_t ARIES_SYSTEM::xid_inc(){
-
-  int old, new_val;
-  do {
-    old = master_record.system_xid;
-    new_val = old+1;
-  }while(!CAS(&master_record.system_xid, old, new_val));
-
-  /* normal_exit()時にまとめてマスターレコードを書き込む */
-
-  // lseek(system_fd, 0, SEEK_SET);
-  // if(write(system_fd, &master_record, sizeof(MasterRecord)) == -1){
-  //   perror("write");
-  //   exit(1);
-  // };
-
-  return new_val;
+ return __sync_fetch_and_add(&master_record.system_xid,1);
 }
 
 uint32_t ARIES_SYSTEM::xid_read(){

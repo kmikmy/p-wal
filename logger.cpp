@@ -6,9 +6,6 @@
 
 using namespace std;
 
-#define CAS(addr, oldval, newval) __sync_bool_compare_and_swap(addr, oldval, newval)
-#define CAS64(addr, oldval, newval) __sync_bool_compare_and_swap((long *)addr, *(long *)&oldval, *(long *)&newval
-#define CAS128(addr, oldval, newval) __sync_bool_compare_and_swap((__int128_t *)(addr), *(__int128_t *)&(oldval), *(__int128_t *)&(newval))
 // #define DEBUG
 
 /* 
@@ -165,17 +162,16 @@ class LogBuffer{
     ret.first = pos;
     ARIES_SYSTEM::master_record.system_last_lsn = pos;
 #else
-    int old, new_val;
-    do {
-      old = ARIES_SYSTEM::master_record.system_last_lsn;
-      new_val = old+1;
-      if(CAS(&ARIES_SYSTEM::master_record.system_last_lsn, old, new_val))
-	break;
-      else
-	cas_miss[th_id]++;
-    }while(1);
-    
-    ret.first = new_val;
+    ret.first = __sync_fetch_and_add(&ARIES_SYSTEM::master_record.system_last_lsn,1);
+    // int old, new_val;
+    // do {
+    //   old = ARIES_SYSTEM::master_record.system_last_lsn;
+    //   new_val = old+1;
+    //   if(CAS(&ARIES_SYSTEM::master_record.system_last_lsn, old, new_val))
+    // 	break;
+    //   else
+    // 	cas_miss[th_id]++;
+    // }while(1);
 #endif    
 
     return ret;
