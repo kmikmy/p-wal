@@ -5,8 +5,11 @@
 #include "tpcc_util.h"
 #include <cstdlib>
 #include <iomanip>
+#include "../ARIES.h"
 
 #define DEBUG
+
+extern DistributedTransTable *dist_trans_table;
 
 void load_table(TPCC_PAGE *pages, int pagesize, int n, const char *filename);
 
@@ -47,12 +50,69 @@ load_table(TPCC_PAGE *pages, int pagesize, int n, const char *filename){
 }
 
 class TpccTransaction{
-private:
+protected:
+  uint32_t xid;
+  int thId;
 public:
-  virtual void run() = 0;
+  TpccTransaction(uint32_t _xid, int _thId){
+    xid = _xid;
+    thId = _thId;
+  }
+  
+  //  virtual void run() = 0;
+  virtual void procedure() = 0;
+
+  void
+  begin(){
+    Log log;
+    memset(&log,0,sizeof(log));
+    log.TransID = xid;
+    log.Type = BEGIN;
+
+    Logger::log_write(&log,thId); // log.LSNが代入される
+
+    dist_trans_table[thId].TransID = xid;
+    dist_trans_table[thId].LastLSN = log.LSN;
+    dist_trans_table[thId].LastOffset = log.Offset;
+    dist_trans_table[thId].UndoNxtLSN = log.LSN; /* BEGIN レコードは END レコードによってコンペンセーションされる. */
+    dist_trans_table[thId].LastOffset = log.Offset;
+  
+
+#ifdef DEBUG
+    Logger::log_debug(log);  
+#endif
+  }
+
+  void 
+  end(){
+    Log log;
+    memset(&log,0,sizeof(log));
+    log.TransID = xid;
+    log.Type = END;
+    log.PrevLSN = dist_trans_table[thId].LastLSN;
+    log.PrevOffset = dist_trans_table[thId].LastOffset;
+    log.UndoNxtLSN = 0; /* 一度 END ログが書かれたトランザクションは undo されることはない */
+    log.UndoNxtOffset = 0; 
+
+    Logger::log_write(&log,thId);
+
+    /* dist_transaction_tableのエントリを削除する. */
+    memset(&dist_trans_table[thId], 0, sizeof(DistributedTransTable));
+
+#ifdef DEBUG
+    Logger::log_debug(log);  
+#endif
+  }
+
+  void 
+  run(){
+    begin();
+    procedure();
+    end();
+  }
 };
 
-class XNewOrder {
+class XNewOrder : public TpccTransaction {
 private:
   uint32_t w_id;
   Constant c;
@@ -87,12 +147,12 @@ private:
   }
 
 public:
-  XNewOrder(Constant _c){
+  XNewOrder(uint32_t xid, int thID, Constant _c) : TpccTransaction(xid, thId){
     w_id = uniform(1,W);
     c = _c;
   }
 
-  void run(){
+  void procedure(){
     d_id = uniform(1, 10); /* district id  */
     c_id = NURand(1023,1,3000,c.c_for_c_id); /* customer id */
     ol_cnt = uniform(5, 15); /* the number of items */
@@ -285,7 +345,7 @@ int main(){
   // std::cout << c.c_for_c_last << "," << c.c_for_c_id << "," << c.c_for_ol_i_id << std::endl;
   init_table();
   load();
-  XNewOrder x(c);
+  XNewOrder x(0, 0, c);
   x.run();
   
 

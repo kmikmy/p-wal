@@ -8,7 +8,6 @@
 
 using namespace std;
 
-#define LOG_OFFSET (1073741824)
 #ifndef FIO
 #define NUM_MAX_LOGFILE 1
 static const char* log_path = "/dev/fioa";
@@ -25,6 +24,24 @@ std::ostream& operator<<( std::ostream& os, OP_TYPE& opt){
   case INC: os << "INC"; break;
   case DEC: os << "DEC"; break;
   case SUBST: os << "SUBST"; break;
+  case READ: os << "[READ]"; break;
+  }
+
+  return os;
+}
+
+std::ostream& operator<<( std::ostream& os, TABLE_TYPE& tid){
+  switch(tid){
+  case SIMPLE: os << "SIMPLE"; break;
+  case WAREHOUSE: os << "WAREHOUSE"; break;
+  case DISTRICT: os << "DISTRICT"; break;
+  case CUSTOMER: os << "CUSTOMER"; break;
+  case HISTORY: os << "HISTORY"; break;
+  case ORDER: os << "ORDER"; break;
+  case ORDERLINE: os << "ORDERLINE"; break;
+  case NEWORDER:  os << "NEWORDER"; break;
+  case ITEM:  os << "ITEM"; break;
+  case STOCK:  os << "STOCK"; break;
   }
 
   return os;
@@ -39,6 +56,7 @@ std::ostream& operator<<( std::ostream& os, LOG_TYPE& type){
   case BEGIN: os << "BEGIN"; break;
   case END: os << "END"; break;
   case OSfile_return: os << "OSfile_return"; break;
+  case INSERT: os << "INSERT"; break;
 
   }
 
@@ -54,9 +72,9 @@ int main(){
     exit(1);
   }
 
-  for(int i=0;i<NUM_MAX_LOGFILE;i++){
 
-    off_t base=(off_t)i*LOG_OFFSET;
+  off_t base = 0; 
+  for(int i=0;i<NUM_MAX_LOGFILE;i++,base+=LOG_OFFSET){
 
     lseek(fd, base, SEEK_SET);
 
@@ -70,6 +88,7 @@ int main(){
       perror("read"); exit(1);
     }
     if(lh->count == 0) continue;
+
 
 #ifdef FIO
     printf("\n###   LogFile(%d)   ###\n",i);
@@ -97,7 +116,7 @@ int main(){
       cout << "Log[" << log->LSN << ":" << log->Offset << "]: TransID=" << log->TransID << ", file_id=" << log->file_id << ", Type=" << log->Type;
       
       if(log->Type != BEGIN && log->Type != END)
-	cout << ", PrevLSN=" << log->PrevLSN << ", PrevOffset=" << log->PrevOffset << ", UndoNxtLSN=" << log->UndoNxtLSN << ", UndoNxtOffset=" << log->UndoNxtOffset << ", PageID=" << log->PageID << ", before=" << log->before << ", after=" << log->after; // << ", op.op_type=" << log->op.op_type << ", op.amount=" << log-op.amount;
+	cout << ", tid=" << log->tid <<", PrevLSN=" << log->PrevLSN << ", PrevOffset=" << log->PrevOffset << ", UndoNxtLSN=" << log->UndoNxtLSN << ", UndoNxtOffset=" << log->UndoNxtOffset << ", PageID=" << log->PageID << ", before=" << log->before << ", after=" << log->after; // << ", op.op_type=" << log->op.op_type << ", op.amount=" << log-op.amount;
 
 
       cout << endl;

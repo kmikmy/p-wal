@@ -31,6 +31,10 @@ static int system_fd;
 extern void recovery();
 extern void pbuf_init();
 
+extern void tpcc_init();
+extern void tpcc_load();
+
+
 static void
 create_dist_trans_table(int th_num)
 {
@@ -78,10 +82,13 @@ ARIES_SYSTEM::db_init(int th_num){
   pbuf_init();
   // 分散トランザクションテーブルの生成
   create_dist_trans_table(th_num);
+  // tpc-c
+  tpcc_init();
+  tpcc_load();
 }
 
 uint32_t ARIES_SYSTEM::xid_inc(){
- return __sync_fetch_and_add(&master_record.system_xid,1);
+  return __sync_fetch_and_add(&master_record.system_xid,1);
 }
 
 uint32_t ARIES_SYSTEM::xid_read(){
@@ -107,6 +114,7 @@ ARIES_SYSTEM::normal_exit()
   master_record.last_exit=true;
 
   lseek(system_fd, 0, SEEK_SET);
+
   if(write(system_fd, &master_record, sizeof(MasterRecord)) == -1){
     perror("write");
     exit(1);

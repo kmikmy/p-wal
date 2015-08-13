@@ -22,3 +22,8 @@
 # aries
 data/*
 !.gitkeep
+
+#tpcc
+*.dat
+tpcc/table/*
+!tpcc/table/.gitkeep

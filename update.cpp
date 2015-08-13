@@ -6,6 +6,7 @@
 #include <set>
 #include <sys/time.h>
 #include <pthread.h>
+#include "plugin/tpc-c/include/tpcc.h"
 
 // #define READ_MODE 1
 
@@ -27,7 +28,7 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id);
 void begin_checkpoint();
 void begin(uint32_t xid, int th_id);
 void end(uint32_t xid, int th_id);
-static void rollback(uint32_t xid, int th_id);
+void rollback(uint32_t xid, int th_id);
 
 
 
@@ -156,7 +157,7 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
 
   log.PrevLSN = dist_trans_table[th_id].LastLSN;
   log.PrevOffset = dist_trans_table[th_id].LastOffset;
-  log.UndoNxtLSN = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
+  log.UndoNxtLSN = 0; // UndoNxtLSNがログに書かれるのはCLRのみ.
   log.UndoNxtOffset = 0;
   log.op=op;
   log.before = pbuf->page.value;
@@ -190,7 +191,7 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
   //  }    
 
   //  cout << "[After Update]" << endl;
-  //  cout << "page[" << p.page_id << "]: page_LSN=" << p.page_LSN << ", value=" << p.value << endl;  
+  //  cout << "page[" << p.page_id << "]: page_LSN=" << p.page_LSN << ", value=" <<  p.value << endl;  
 }
 
 void 
@@ -241,13 +242,20 @@ end(uint32_t xid, int th_id=0){
   Iteratorを使って、トランザクションテーブルを巡回している場合があるため.
   rollback中のトランザクションテーブルの更新が不適(2014/11/14現在).
   recovery.cppのrollback_for_recoveryのコードをコピーする予定.
+
+  前に書かれたログが書き込まれていない可能性がある。
+  そのために、一度ログバッファの中身をflushしなければならない（？　#2015/07/09
 */
 void
 rollback(uint32_t xid, int th_id){
+  //  cout << "rollback[" << xid << "]" << std::endl;
+
   int log_fd = open(Logger::logpath, O_RDONLY);
   if(log_fd == -1){
     perror("open"); exit(1);
   }
+
+  Logger::log_flush(th_id);
   
   uint64_t log_offset = dist_trans_table[th_id].LastOffset; // rollbackするトランザクションの最後のLSN
 
@@ -269,11 +277,84 @@ rollback(uint32_t xid, int th_id){
     Logger::log_debug(log);
 #endif
     
-    if (log.Type == UPDATE){
+    if (log.Type == UPDATE || log.Type == INSERT){
       int idx=log.PageID;
-      
-      page_table[idx].page.value = log.before;
-      page_table[idx].page.page_LSN = log.PrevLSN; 
+
+      if(log.Type == UPDATE){
+	switch((int)log.tid){
+	case SIMPLE:
+	  page_table[idx].page.value = log.before;	  
+	  page_table[idx].page.page_LSN = log.PrevLSN; 
+	  break;
+	case WAREHOUSE:
+	  memcpy(&Warehouse::pages[idx-1], log.padding, sizeof(PageWarehouse));
+	  Warehouse::pages[idx-1].page_LSN = log.PrevLSN; 
+	  break;
+	case DISTRICT:
+	  memcpy(&District::pages[idx-1], log.padding, sizeof(PageDistrict));
+	  District::pages[idx-1].page_LSN = log.PrevLSN; 
+	  break;
+	case CUSTOMER:
+	  memcpy(&Customer::pages[idx-1], log.padding, sizeof(PageCustomer));
+	  Customer::pages[idx-1].page_LSN = log.PrevLSN; 
+	  break;
+	case HISTORY:
+	  /* not defined */
+	  break;
+	case ORDER:
+	  // memcpy(&Order::pages[idx-1], log.padding, sizeof(PageOrder));
+	  Order::pages[idx-1].page_LSN = log.PrevLSN; 
+	  break;
+	case ORDERLINE:
+	  // memcpy(&OrderLine::pages[idx-1], log.padding, sizeof(PageOrderLine));
+	  OrderLine::pages[idx-1].page_LSN = log.PrevLSN; 
+	  break;
+	case NEWORDER:
+	  // memcpy(&NewOrder::pages[idx-1], log.padding, sizeof(PageNewOrder));
+	  NewOrder::pages[idx-1].page_LSN = log.PrevLSN; 
+	  break;
+	case ITEM:
+	  memcpy(&Item::pages[idx-1], log.padding, sizeof(PageItem));
+	  Item::pages[idx-1].page_LSN = log.PrevLSN; 
+	  break;
+	case STOCK:
+	  memcpy(&Stock::pages[idx-1], log.padding, sizeof(PageStock));
+	  Stock::pages[idx-1].page_LSN = log.PrevLSN; 
+	  break;
+	default:
+	  PERR("switch");
+	}
+      } if(log.Type == INSERT){
+	switch((int)log.tid){
+	case SIMPLE:
+	  break;
+	case WAREHOUSE:
+	  break;
+	case DISTRICT:
+	  break;
+	case CUSTOMER:
+	  break;
+	case HISTORY:
+	  /* not defined */
+	  break;
+	case ORDER:
+	  Order::pages[idx-1].delete_flag = true;
+	  break;
+	case ORDERLINE:
+	  OrderLine::pages[idx-1].delete_flag = true;
+	  break;
+	case NEWORDER:
+	  NewOrder::pages[idx-1].delete_flag = true;
+	  break;
+	case ITEM:
+	  break;
+	case STOCK:
+	  break;
+	default:
+	  PERR("switch");
+	}
+      }
+
 
       Log clog;
       memset(&clog,0,sizeof(Log));
@@ -281,6 +362,7 @@ rollback(uint32_t xid, int th_id){
       clog.TransID = log.TransID;
 
       clog.PageID = log.PageID;
+      clog.tid = log.tid;
       clog.UndoNxtLSN = log.PrevLSN;
       clog.UndoNxtOffset = log.PrevOffset;
       // clog.before isn't needed because compensation log record is redo-only.
@@ -289,25 +371,25 @@ rollback(uint32_t xid, int th_id){
       clog.PrevLSN = dist_trans_table[th_id].LastLSN;
       clog.PrevOffset = dist_trans_table[th_id].LastOffset;
 
-
       // compensation log recordをどこに書くかという問題はひとまず置いておく
       // とりあえず全部id=0のログブロックに書く
       ret = Logger::log_write(&clog, 0); 
-      dist_trans_table[th_id].LastLSN = clog.LSN;
-      dist_trans_table[th_id].LastOffset = clog.Offset;
-      dist_trans_table[th_id].UndoNxtLSN = clog.UndoNxtLSN;
-      dist_trans_table[th_id].UndoNxtOffset = clog.UndoNxtOffset;
 
 #ifdef DEBUG
       Logger::log_debug(clog);
 #endif
 
-    }
-    else if(log.Type == COMPENSATION){
+      dist_trans_table[th_id].LastLSN = clog.LSN;
+      dist_trans_table[th_id].LastOffset = clog.Offset;
+      dist_trans_table[th_id].UndoNxtLSN = clog.UndoNxtLSN;
+      dist_trans_table[th_id].UndoNxtOffset = clog.UndoNxtOffset;
+
+      log_offset = log.PrevOffset;
+      continue;
+    } else if(log.Type == COMPENSATION){
       log_offset = log.UndoNxtOffset;
       continue;
-    }
-    else if(log.Type == BEGIN){
+    } else if(log.Type == BEGIN){
       Log end_log;
       memset(&end_log,0,sizeof(Log));
       end_log.Type = END;
@@ -319,9 +401,6 @@ rollback(uint32_t xid, int th_id){
       end_log.UndoNxtOffset = 0;
 
       Logger::log_write(&end_log, 0);
-
-
-
 #ifdef DEBUG
       Logger::log_debug(end_log);
 #endif
@@ -329,7 +408,7 @@ rollback(uint32_t xid, int th_id){
       /* dist_transaction_tableのエントリを削除する. */
       memset(&dist_trans_table[th_id], 0, sizeof(DistributedTransTable));    
     }
-    log_offset = log.Offset;
+    log_offset = log.PrevOffset;
   }
 
   close(log_fd);

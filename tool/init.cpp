@@ -7,12 +7,13 @@ using namespace std;
 #define LOG_OFFSET (1073741824)
 #ifndef FIO
 #define NUM_MAX_LOGFILE 1
+//static const char* log_path = "/dev/fioa";
 static const char* log_path = "/dev/fioa";
 #else
 #define NUM_MAX_LOGFILE 50
 static const char* log_path = "/dev/fioa";
-//static const char* log_path = "/dev/shm/kamiya/log.dat";
 #endif
+
 
 void init();
 
@@ -26,8 +27,9 @@ void init(){
   MasterRecord master_record;
   char *ARIES_HOME =  getenv("ARIES_HOME");
   string system_filename = ARIES_HOME;
+  cout << system_filename << endl;
   system_filename += "/data/system.dat";
-  
+ 
   if( (fd = open(system_filename.c_str(), O_RDWR | O_SYNC | O_CREAT, 0666 )) == -1 ){
     perror("open");
     exit(1);
@@ -60,22 +62,23 @@ void init(){
   close(fd);
 
 #ifndef FIO
-  if( (fd = open(log_path, O_WRONLY)) == -1 ){  
+  if( (fd = open(log_path, O_WRONLY | O_CREAT, 0666)) == -1 ){  
     perror("open");
     exit(1);
   }
+  cout << log_path << endl;
+  int log_num = 1;
 #endif
 #ifdef FIO
   if( (fd = open(log_path, O_WRONLY)) == -1 ){  
     perror("open");
     exit(1);
   }
+  int log_num = 32;
 #endif
 
-  for(int i=0;i<NUM_MAX_LOGFILE;i++){
-
-    off_t base = i * LOG_OFFSET;
-
+    uint64_t base = 0;
+    for(int i=0;i<log_num;i++,base += LOG_OFFSET){
 #ifdef FIO
     printf("###   LogFile #%d is cleared   ###\n",i);
 #endif

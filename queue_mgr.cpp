@@ -12,7 +12,7 @@ using namespace std;
    QUEUEがemptyの状態とfullの状態を区別するために、fullの状態は１つ分だけ要素が空いているようにするので、
    キューに入る最大要素+1が実際のキューのサイズとする.
 */
-#define MAX_QUEUE_SIZE 1000000 + 1 
+#define MAX_QUEUE_SIZE 10000000 + 1 
 //#define MAX_QUEUE_SIZE 100 + 1 
 
 extern MasterRecord master_record;
@@ -134,7 +134,7 @@ trans_queues_init(uint32_t ntrans, uint32_t nqueue){
   }
 
   // 現在までに与えた最後のXIDをマスタレコードに保持する.
-  ARIES_SYSTEM::master_record.system_xid = trans.TransID-1;
+  ARIES_SYSTEM::master_record.system_xid = trans.TransID;
   //  struct timeval t;
   //  gettimeofday(&t,NULL);
 
@@ -151,7 +151,7 @@ void *
 manage_queue_thread(void *_args){
   ProArg args = *((ProArg *)_args);
   int cnt = args.ntrans;
-  int nqueue = args.nqueue;
+  //  int nqueue = args.nqueue;
   //   free(_args);
 
   int cpu = 0;
@@ -240,12 +240,11 @@ process_queue_thread(void *_th_id){
   return NULL;
 }
 
-
-static 
-void *dummy_func(void *){
+/* batchモードの時に渡す。 何もしない関数 */
+void*
+dummy_func(void *){
   return NULL;
 }
-
 
 pthread_t
 gen_producer_thread(int _ntrans, int _nqueue){
@@ -298,7 +297,7 @@ gen_worker_thread(int nthread){
     
     for(int i=0;i<nthread; i++){
       pthread_join(th[i], NULL);
-      //cout << "thread(" << i << ")" << endl;
+      cout << "thread: " << i << "/" << nthread << endl;
     }
     
 }

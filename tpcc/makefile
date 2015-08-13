@@ -24,5 +24,5 @@ create_tables: create_tables.o tpcc_util.o
 load_tables: load_tables.o
 	$(CC) $(CFLAGS) -o load_tables.exe $^
 
-new-order: new-order.o tpcc_util.o tpcc_table.o
+new-order: new-order.o tpcc_util.o tpcc_table.o ../transaction.o
 	$(CC) $(CFLAGS) -o new-order.exe $^

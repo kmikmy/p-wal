@@ -15,11 +15,11 @@ using namespace std;
 uint32_t num_group_commit = 1; 
 uint64_t cas_miss[MAX_WORKER_THREAD];
 
-#ifndef FIO
+#ifdef FIO
 const char* Logger::logpath = "/dev/fioa";
 #else
 const char* Logger::logpath = "/dev/fioa";
-//const char* Logger::logpath = "/dev/shm/kamiya/log.dat";
+//const char* Logger::logpath = "/work2/tmp/log.dat";
 #endif
 
 typedef pair<off_t, off_t> LSN_and_Offset;
@@ -32,7 +32,7 @@ typedef pair<off_t, off_t> LSN_and_Offset;
 */
 class LogBuffer{
  private:
-  static const unsigned MAX_LOG_SIZE=256;
+  static const unsigned MAX_LOG_SIZE=512;
   unsigned idx;
   int log_fd;
   off_t base_addr;
@@ -89,6 +89,7 @@ class LogBuffer{
     }
     int ret = read(log_fd, header, sizeof(LogHeader));
     if(-1 == ret){
+	cout << "log file open error" << endl;
       perror("read"); exit(1);
     }
   }
@@ -108,6 +109,8 @@ class LogBuffer{
     }
 
     off_t pos = base_addr + sizeof(LogHeader) + (save_count * sizeof(Log));
+
+    //    cout << "flush(): base_addr=" << base_addr << ", pos=" << pos << endl;
 
     lseek(log_fd, pos, SEEK_SET);
     // lseek(log_fd, 0, SEEK_END);
@@ -213,6 +216,7 @@ std::ostream& operator<<( std::ostream& os, LOG_TYPE& type){
   case BEGIN: os << "BEGIN"; break;
   case END: os << "END"; break;
   case OSfile_return: os << "OSfile_return"; break;
+  case INSERT: os << "INSERT"; break;
   }
 
   return os;
@@ -231,8 +235,8 @@ int
 Logger::log_write(Log *log, int th_id){
 #ifndef FIO
   th_id = 0;
-#endif
   logBuffer[th_id].mtx_for_insert.lock();  
+#endif
 
   LSN_and_Offset lao;
 
@@ -263,19 +267,66 @@ Logger::log_write(Log *log, int th_id){
     logBuffer[th_id].header->count += tmp_size;
     logBuffer[th_id].clear(); // idxとnum_commitの値を初期化する
 
+#ifndef FIO
     logBuffer[th_id].mtx_for_write.lock();
     logBuffer[th_id].mtx_for_insert.unlock();  
+#endif
 
     logBuffer[th_id].flush(tmp_flag, tmp_header, tmp_size);
+#ifndef FIO
     logBuffer[th_id].mtx_for_write.unlock();
+#endif
 
     return 0;
   }
 
+#ifndef FIO
   logBuffer[th_id].mtx_for_insert.unlock();  
+#endif
+
   return 0;
 }
 
+
+/* insert lockを獲得した後、write_lockを獲得して、強制的にflushする */
+void
+Logger::log_flush(int th_id){
+#ifndef FIO
+  th_id = 0;
+  logBuffer[th_id].mtx_for_insert.lock();  
+#endif
+
+  int tmp_flag = logBuffer[th_id].getDoubleBufferFlag();
+  //    LogHeader *tmp_header = logBuffer[th_id].header;
+  LogHeader *tmp_header;
+  size_t tmp_size = logBuffer[th_id].getSize();
+
+  if ((posix_memalign((void **) &tmp_header, 512, sizeof(LogHeader))) != 0)
+    {
+      fprintf(stderr, "posix_memalign failed\n");
+      exit(1);
+    }
+
+  *tmp_header = *(logBuffer[th_id].header);
+
+  /* ログバッファを切り替えて、ヘッダを更新 */
+  logBuffer[th_id].toggle_buffer();
+  logBuffer[th_id].header->count += tmp_size;
+  logBuffer[th_id].clear(); // idxとnum_commitの値を初期化する
+
+#ifndef FIO
+  logBuffer[th_id].mtx_for_write.lock();
+  logBuffer[th_id].mtx_for_insert.unlock();  
+#endif
+
+  logBuffer[th_id].flush(tmp_flag, tmp_header, tmp_size);
+#ifndef FIO
+  logBuffer[th_id].mtx_for_write.unlock();
+#endif
+}
+
+
+/* lockを獲得しないので、ワーカが競合する時には使えない */
 void
 Logger::log_all_flush(){
   for(int i=0;i<MAX_WORKER_THREAD;i++)

@@ -7,6 +7,9 @@
 #include <map>
 #include <set>
 #include <algorithm>
+#include "plugin/tpc-c/include/tpcc.h"
+
+Constant g_c;
 
 #define EX1
 //#define EX10
@@ -64,7 +67,7 @@ clear_transaction(int th_id){
    process_transaction()を呼び出す事で、トランザクションを処理する。
 */
 void
-start_transaction(uint32_t xid, int th_id) 
+start_transaction_simple(uint32_t xid, int th_id) 
 {
   /* 命令群を構成する */
   OP ops[MAX_UPDATE];
@@ -82,16 +85,17 @@ start_transaction(uint32_t xid, int th_id)
 #endif
 
   for(int i=0;i<update_num;i++){
-    // if(i&1){
-    //   ops[i].op_type = READ;
-    // } else {
-    //   operation_select(&ops[i]);
-    // }
-    ops[i].op_type = READ;
+    if(i&1){
+      ops[i].op_type = READ;
+    } else {
+      operation_select(&ops[i]);
+    }
+    //    ops[i].op_type = READ;
     //operation_select(&ops[i]);
     page_select(&page_ids[i]);
   }
-  sort(page_ids, page_ids+update_num); // デッドロックを起こさないようにするため、昇順にページを選択する
+
+  sort(page_ids, page_ids+update_num); // デッドロックを起こさないようにするため、昇順にソートする
 
   //  cout << "th_transaction: " << xid << endl;
   // transactionがrollbackしたら何度でも繰り返す
@@ -101,9 +105,22 @@ start_transaction(uint32_t xid, int th_id)
     construct_transaction(&trans);
     xid = trans.TransID; // 新しいトランザクションIDで再度開始する.
   };
-
 }
 
+void
+start_transaction_new_order(uint32_t xid, int thId) {
+  XNewOrder x(xid, thId, g_c);
+  x.run();
+}
+
+void
+start_transaction(uint32_t xid, int thId) {
+  if(W > 0){
+    start_transaction_new_order(xid, thId);
+  } else {
+    start_transaction_simple(xid, thId);
+  }
+}
 /*
   逐次でトランザクションを num 件実行する。
 */
@@ -115,6 +132,7 @@ batch_start_transaction(int num){
 
     // th_id=0のdist_trans_tableを利用する
     append_transaction(trans, 0);
+    //    start_transaction(trans.TransID, 0);
     start_transaction(trans.TransID, 0);
     clear_transaction(0);
   }

@@ -21,7 +21,8 @@
 
 
 
-enum LOG_TYPE { UPDATE, COMPENSATION, PREPARE, BEGIN, END, OSfile_return};
+enum LOG_TYPE { UPDATE, COMPENSATION, PREPARE, BEGIN, END, OSfile_return, INSERT};
+enum TABLE_TYPE { SIMPLE, WAREHOUSE, DISTRICT, CUSTOMER, HISTORY, ORDER, ORDERLINE, NEWORDER, ITEM, STOCK };
 enum OP_TYPE { NONE, INC,DEC,SUBST,READ };
 enum STATE { U,P,C }; // UNCOMMITED, PREPARED, COMMITED
 
@@ -87,10 +88,13 @@ typedef struct {
   int before;
   int after;
   OP op; // 8 bytes
-  /* ここまでで 80 bytes */
-  
-  char padding[432];
-} Log; /* 512バイト */
+  TABLE_TYPE tid; 
+  /* ここまでで 84 bytes */
+  char padding[428];
+  /* ここまでで 512 bytes */
+  //  char padding2[512];
+  //  char padding3[1024];
+} Log; /* 1024バイト */
 #pragma pack()
 
 typedef struct{
@@ -131,7 +135,7 @@ class Logger
   static const char* logpath;
   static void set_num_group_commit(int group_param);
   static int log_write(Log *log, int th_id);
-  static void log_flush();
+  static void log_flush(int th_id);
   static void log_all_flush();
   static void log_debug(Log log);
   static void init();

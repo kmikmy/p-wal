@@ -1,6 +1,6 @@
 # Makefile
 CC = g++
-CFLAGS = -g -Wall -O2 -std=c++0x -lpthread
+CFLAGS = -g -Wall -std=c++0x -lpthread
 PROGS = write_pages read_pages read_master_record read_logs read_fio init init_fio
 
 
