@@ -1,4 +1,4 @@
-#include "../../ARIES.h"
+#include "../../include/ARIES.h"
 #include "include/tpcc.h"
 #include "include/tpcc_page.h"
 #include "include/tpcc_table.h"
@@ -188,8 +188,8 @@ XNewOrder::procedure(){
 
   PageCustomer *cp = Customer::select1(w_id, d_id, c_id, thId);
   double c_discount = cp->c_discount;
-  char *c_last = cp->c_last;
-  char *c_credit = cp->c_credit;
+  // char *c_last = cp->c_last;
+  // char *c_credit = cp->c_credit;
 
   PageNewOrder nop;
   {
@@ -316,11 +316,10 @@ XNewOrder::procedure(){
 #ifdef DEBUG
   std::cout << "*** New Order ***" << std::endl;
   std::cout << "Warehouse:\t" << w_id << "\tDistrict:\t" << d_id << std::endl;
-  std::cout << "Customer:\t" << c_id << "\tName:\t" << c_last << "\tCredit:\t" << c_credit << std::endl;
+  std::cout << "Customer:\t" << c_id << "\tName:\t" << cp->c_last << "\tCredit:\t" << cp->c_credit << std::endl;
   std::cout << "Customer Discount:\t" << c_discount << "\tWarehouse Tax:\t" << w_tax << "\tDistrict Tax:\t" << d_tax << std::endl;
   std::cout << "Order Number:\t" << o_id << "\tNumber of Lines:\t" << ol_cnt << std::endl;
   std::cout << "Order Entry Date:\t" << o_entry_d << "\tTotal Amount:\t" << total_amount << std::endl << std::endl;
-
     
   std::cout << "Supp_W\t" << "Item_ID\t" << std::left << std::setw(25)<< "Item Name\t" << "Qty\t" << "S\t" << "BG\t" << "Price\t" << "Amount" << std::endl;
   for(uint32_t i=0;i<ol_cnt;i++){

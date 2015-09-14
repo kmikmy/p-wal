@@ -1,5 +1,5 @@
 #include "include/tpcc.h"
-#include "../../ARIES.h"
+#include "../../include/ARIES.h"
 #include <cstdlib>
 
 PageWarehouse *Warehouse::pages;

@@ -1,5 +1,5 @@
-#include "ARIES.h"
-#include "dpt.h"
+#include "include/ARIES.h"
+#include "include/dpt.h"
 
 using namespace std;
 

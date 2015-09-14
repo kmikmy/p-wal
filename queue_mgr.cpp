@@ -1,4 +1,4 @@
-#include "ARIES.h"
+#include "include/ARIES.h"
 #include <sys/time.h>
 #include <iostream>
 
@@ -87,6 +87,19 @@ extern void start_transaction(uint32_t xid, int th_id);
 extern void  append_transaction(Transaction trans, int th_id);
 extern void clear_transaction(int th_id);
 
+#ifdef BATCH_TEST
+/************************************************************************
+ * トランザクションキューに一度にまとめてトランザクションをセットする時のみ使う関数
+ ***********************************************************************/
+static void trans_queues_init(uint32_t ntrans, uint32_t nqueue);
+
+#else
+/************************************************************************
+ * トランザクションキューに逐次トランザクションを追加する時のみ使う関数の宣言
+ ***********************************************************************/
+static void *manage_queue_thread(void *_args);
+#endif
+
 TransQueue *dist_trans_queues;
 
 /* 
@@ -99,97 +112,6 @@ static bool rest_flag;
 static void
 create_dist_trans_queues(int th_num){
   dist_trans_queues = (TransQueue *)calloc(th_num, sizeof(TransQueue));
-}
-
-/* 
-   trans_queuesにトランザクションをまとめて詰め込む。
- */
-static 
-void 
-trans_queues_init(uint32_t ntrans, uint32_t nqueue){
-#ifdef DEBUG
-  cout << "[creating trans_queue]" << endl;
-#endif
-
-#ifndef BATCH_TEST
-  nqueue = 1;
-#endif
-
-  uint32_t n_each_queue = ntrans / nqueue;
-  uint32_t reminder = ntrans % nqueue;
-
-  Transaction trans;
-  construct_transaction(&trans);
-
-  for(uint32_t i=0;i<n_each_queue;i++){
-    for(uint32_t j=0;j<nqueue;j++){
-      dist_trans_queues[j].push(trans);
-      trans.TransID++;
-    }
-  }
-
-  for(uint32_t j=0;j<reminder;j++){
-    dist_trans_queues[j].push(trans);
-    trans.TransID++;
-  }
-
-  // 現在までに与えた最後のXIDをマスタレコードに保持する.
-  ARIES_SYSTEM::master_record.system_xid = trans.TransID;
-  //  struct timeval t;
-  //  gettimeofday(&t,NULL);
-
-
-#ifdef DEBUG  
-  cout << "[start processing]" << endl;
-#endif
-
-  return;
-}
-
-static
-void *
-manage_queue_thread(void *_args){
-  ProArg args = *((ProArg *)_args);
-  int cnt = args.ntrans;
-  //  int nqueue = args.nqueue;
-  //   free(_args);
-
-  int cpu = 0;
-  cpu_set_t mask;
-
-  /* initialize and set cpu flag */
-  CPU_ZERO(&mask);
-  CPU_SET(cpu, &mask);
-
-  /* set affinity to current process */
-  //  sched_setaffinity(0, sizeof(mask), &mask);
-
-  while(cnt > 0){
-    dist_trans_queues[0].lock(); // critical section start
-
-    // 一度ロックを取ったらtrans_queueが一杯になるまでトランザクションをキューにプッシュする
-    while(!dist_trans_queues[0].full() && cnt > 0){ 
-      Transaction trans;
-      construct_transaction(&trans);
-      dist_trans_queues[0].push(trans);
-
-      cnt--;
-
-#ifdef DEBUG
-      cout << pthread_self() << ") cnt: " << cnt << endl;
-#endif
-    }
-
-    if(dist_trans_queues[0].full()){ 
-      //      cout << "trans_queue is full" << endl;
-    }
-
-    dist_trans_queues[0].unlock(); // critical section end
-    //      usleep(1000);
-  }
-  rest_flag = false; // process_queue_threadに終了を通知する 
-
-  return NULL;
 }
 
 static
@@ -299,5 +221,108 @@ gen_worker_thread(int nthread){
       pthread_join(th[i], NULL);
       cout << "thread: " << i << "/" << nthread << endl;
     }
-    
 }
+
+
+
+
+#ifdef BATCH_TEST
+/************************************************************************
+ * トランザクションキューに一度にまとめてトランザクションをセットする時のみ使う関数
+ ***********************************************************************/
+
+/* 
+   trans_queuesにトランザクションをまとめて詰め込む。
+ */
+static 
+void 
+trans_queues_init(uint32_t ntrans, uint32_t nqueue){
+#ifdef DEBUG
+  cout << "[creating trans_queue]" << endl;
+#endif
+
+  uint32_t n_each_queue = ntrans / nqueue;
+  uint32_t reminder = ntrans % nqueue;
+
+  Transaction trans;
+  construct_transaction(&trans);
+
+  for(uint32_t i=0;i<n_each_queue;i++){
+    for(uint32_t j=0;j<nqueue;j++){
+      dist_trans_queues[j].push(trans);
+      trans.TransID++;
+    }
+  }
+
+  for(uint32_t j=0;j<reminder;j++){
+    dist_trans_queues[j].push(trans);
+    trans.TransID++;
+  }
+
+  // 現在までに与えた最後のXIDをマスタレコードに保持する.
+  ARIES_SYSTEM::master_record.system_xid = trans.TransID;
+  //  struct timeval t;
+  //  gettimeofday(&t,NULL);
+
+
+#ifdef DEBUG  
+  cout << "[start processing]" << endl;
+#endif
+
+  return;
+}
+
+#else
+
+/************************************************************************
+ * トランザクションキューに逐次トランザクションを追加する時のみ使う関数
+ ***********************************************************************/
+
+static
+void *
+manage_queue_thread(void *_args){
+  ProArg args = *((ProArg *)_args);
+  int cnt = args.ntrans;
+  //  int nqueue = args.nqueue;
+  //   free(_args);
+
+  int cpu = 0;
+  cpu_set_t mask;
+
+  /* initialize and set cpu flag */
+  CPU_ZERO(&mask);
+  CPU_SET(cpu, &mask);
+
+  /* set affinity to current process */
+  //  sched_setaffinity(0, sizeof(mask), &mask);
+
+  while(cnt > 0){
+    dist_trans_queues[0].lock(); // critical section start
+
+    // 一度ロックを取ったらtrans_queueが一杯になるまでトランザクションをキューにプッシュする
+    while(!dist_trans_queues[0].full() && cnt > 0){ 
+      Transaction trans;
+      construct_transaction(&trans);
+      dist_trans_queues[0].push(trans);
+
+      cnt--;
+
+#ifdef DEBUG
+      cout << pthread_self() << ") cnt: " << cnt << endl;
+#endif
+    }
+
+    if(dist_trans_queues[0].full()){ 
+      //      cout << "trans_queue is full" << endl;
+    }
+
+    dist_trans_queues[0].unlock(); // critical section end
+    //      usleep(1000);
+  }
+  rest_flag = false; // process_queue_threadに終了を通知する 
+
+  return NULL;
+}
+
+#endif
+

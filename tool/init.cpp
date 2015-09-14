@@ -1,6 +1,6 @@
 #include <iostream>
 #include <cstdlib>
-#include "../ARIES.h"
+#include "../include/ARIES.h"
 
 using namespace std;
 

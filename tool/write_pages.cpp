@@ -1,4 +1,4 @@
-#include "../ARIES.h"
+#include "../include/ARIES.h"
 #include <iostream>
 #include <ctime>
 #include <cstdlib>

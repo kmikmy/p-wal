@@ -1,5 +1,5 @@
-#include "ARIES.h"
-#include "dpt.h"
+#include "include/ARIES.h"
+#include "include/dpt.h"
 #include <mutex>
 #include <cstdlib>
 #include <sys/types.h>
@@ -208,7 +208,7 @@ next_log(int log_fd, Log *log){
 #else
 static int
 next_log(AnaLogBuffer *alogs, std::set<int> *exist_flags, Log *log){
-  int min_id;
+  int min_id=-1;
   Log min_log,tmp_log;
 
   std::set<int>::iterator it;
@@ -240,6 +240,9 @@ next_log(AnaLogBuffer *alogs, std::set<int> *exist_flags, Log *log){
     return 0;
   }
 
+  if(min_id == -1){
+    PERR("not found next processing log");    
+  }
   alogs[min_id].next(); // LSNが一番小さなログを持っているalogを一つ進める
   *log = min_log;
 
@@ -627,9 +630,8 @@ undo(){
   }
 
   recovery_trans_table.clear();
-
-  //  page_undo_write(PAGE_N);
 }
+
 
 static void
 page_table_debug(){
@@ -639,28 +641,6 @@ page_table_debug(){
     cout << "page[" << page_table[i].page.pageID << "]: page_LSN=" << page_table[i].page.page_LSN << ", value=" << page_table[i].page.value << endl;
   }
   cout << endl;
-}
-
-
-/* (undoの後に呼び出される処理だが、実際は単純に)ページを書き出す処理 */
-static void 
-page_undo_write(unsigned n){
-  int fd;
-  std::string page_filename = ARIES_HOME;
-  page_filename += "/data/pages.dat";
-
-  if( (fd = open(page_filename.c_str(),  O_WRONLY )) == -1){
-    perror("open");
-    exit(1);
-  }
-  
-  lseek(fd,0,SEEK_SET);
-
-  for(unsigned i=0;i<n;i++){
-    if( -1 == write(fd, &page_table[i].page, sizeof(Page))){
-      perror("write"); exit(1);
-    }    
-  }  
 }
 
 void recovery(){

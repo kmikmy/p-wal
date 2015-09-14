@@ -1,4 +1,4 @@
-#include "ARIES.h"
+#include "include/ARIES.h"
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
@@ -72,7 +72,8 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
   set<uint32_t> my_lock_table;
   OP op;
   uint32_t page_id;
-  
+  int read_value;
+
 #ifndef READ_MODE
   begin(xid, th_id);  // begin log write  
 #endif
@@ -125,11 +126,11 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
     }
     
     if(op.op_type == READ){
-      int tmp = page_table[page_id].page.value;
+      read_value = page_table[page_id].page.value;
+      read_value++; // * this is just codes for avoiding warning
     } else {
       WAL_update(op, xid, page_id, th_id);
     }
-    // usleep(100);
   }
 #ifndef READ_MODE
   end(xid, th_id); // end log write

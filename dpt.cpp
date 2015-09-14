@@ -2,8 +2,8 @@
 #include <mutex>
 #include <iterator>
 #include <cstddef>
-#include "ARIES.h"
-#include "dpt.h"
+#include "include/ARIES.h"
+#include "include/dpt.h"
 
 // 既定のコンストラクタでは、末端に相当するイテレータを作成する
 DirtyPageTableIterator::DirtyPageTableIterator(){

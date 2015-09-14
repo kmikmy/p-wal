@@ -1,5 +1,5 @@
-#include "ARIES.h"
-#include "dpt.h"
+#include "include/ARIES.h"
+#include "include/dpt.h"
 #include <map>
 
 DirtyPageTable dirty_page_table(PAGE_N);

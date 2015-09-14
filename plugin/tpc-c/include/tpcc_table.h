@@ -5,7 +5,7 @@
 #include <iostream>
 #include "tpcc.h"
 #include "tpcc_page.h"
-#include "../../../ARIES.h"
+#include "../../../include/ARIES.h"
 
 /* #ifndef W */
 /* #define W 1 // Scale Factor */

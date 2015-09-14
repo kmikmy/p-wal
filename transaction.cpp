@@ -1,5 +1,5 @@
-#include "ARIES.h"
-#include "dpt.h"
+#include "include/ARIES.h"
+#include "include/dpt.h"
 #include <iostream>
 #include <cstdlib>
 #include <pthread.h>
@@ -128,6 +128,7 @@ void
 batch_start_transaction(int num){
   for(int i=0;i<num;i++){
     Transaction trans;
+    memset(&trans, 0, sizeof(Transaction));
     construct_transaction(&trans);
 
     // th_id=0のdist_trans_tableを利用する
@@ -145,6 +146,7 @@ each_operation_mode(int file_id){
   uint32_t page_id;
   int  m;
 
+  memset(&trans, 0, sizeof(Transaction));
   construct_transaction(&trans);
   append_transaction(trans, file_id);
 
