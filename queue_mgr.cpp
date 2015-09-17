@@ -219,7 +219,6 @@ gen_worker_thread(int nthread){
     
     for(int i=0;i<nthread; i++){
       pthread_join(th[i], NULL);
-      cout << "thread: " << i << "/" << nthread << endl;
     }
 }
 

@@ -17,7 +17,7 @@ all: aries aries_batch aries_fio aries_fio_batch
 
 .PHONY: clean
 clean:
-	rm -rf  $(program) $(objs) *~ *.exe
+	rm -rf  $(program) $(objs) *.d *~ *.exe
 
 aries: $(objs)
 	$(CC) $(CFLAGS) -c logger.cpp
