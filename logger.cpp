@@ -3,6 +3,9 @@
 #include <utility>
 #include <sys/time.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <mutex>
+#include <cstring>
 
 using namespace std;
 
@@ -13,7 +16,6 @@ using namespace std;
    Logger::set_num_group_commit()でセットする.
 */
 uint32_t num_group_commit = 1; 
-uint64_t cas_miss[MAX_WORKER_THREAD];
 
 #ifdef FIO
 const char* Logger::logpath = "/dev/fioa";
@@ -32,32 +34,29 @@ typedef pair<off_t, off_t> LSN_and_Offset;
 */
 class LogBuffer{
  private:
-  static const unsigned MAX_LOG_SIZE=512;
-  unsigned idx;
+  static const unsigned MAX_CHUNK_LOG_SIZE=256*1024;;
+  unsigned ptr_on_chunk; 
   int log_fd;
-  off_t base_addr;
+  off_t segment_base_addr;
   int th_id;
   int double_buffer_flag; // this flag's value is 0 or 1.
 
  public:
-  //  Log logs[2][MAX_LOG_SIZE];
-  Log *logs[2];
-  //  LogHeader *header;
-  LogHeader *header;
+  LogSegmentHeader *log_segment_header[2];
+  char *log_buffer_body[2];
   std::mutex mtx_for_insert;
   std::mutex mtx_for_write;
   unsigned num_commit;
 
   LogBuffer(){
-    clear();
     log_fd = open(Logger::logpath, O_CREAT | O_RDWR | O_DIRECT, 0666);
   }
 
   void
-  clear(){
-    idx=0;
+  clear_log(int double_buffer_flag){
+    memset(log_buffer_body[d_flag], 0, MAX_CHUNK_SIZE);
+    ptr=sizeof(size_t); // 先頭からsizeof(size_t)バイトは、chunkSizeを書き込む
     num_commit=0;
-    //    memset(logs,0,sizeof(logs));
   }
 
   off_t
@@ -71,119 +70,93 @@ class LogBuffer{
   {
     th_id = _th_id;
     double_buffer_flag = 0;
-    base_addr = (off_t)th_id * LOG_OFFSET;
-    lseek(log_fd, base_addr, SEEK_SET);
+    segment_base_addr = (off_t)th_id * LOG_OFFSET;
+    lseek(log_fd, segment_base_addr, SEEK_SET);
 
-    if ((posix_memalign((void **) &logs[0], 512, sizeof(Log)*MAX_LOG_SIZE)) != 0) {
-      fprintf(stderr, "posix_memalign failed\n");
-      exit(1);
-    }
-    if ((posix_memalign((void **) &logs[1], 512, sizeof(Log)*MAX_LOG_SIZE)) != 0) {
-      fprintf(stderr, "posix_memalign failed\n");
-      exit(1);
-    }
+    /* ダブルバッファリング用にチャンクログ領域とログファイルヘッダを二つ所持している */
+    for(int i=0;i<2;i++){
+      if ((posix_memalign((void **) &log_buffer_body[i], 512, MAX_CHUNK_LOG_SIZE)) != 0) {
+	fprintf(stderr, "posix_memalign failed\n");
+	exit(1);
+      }
 
-    if ((posix_memalign((void **) &header, 512, sizeof(LogHeader))) != 0) {
-      fprintf(stderr, "posix_memalign failed\n");
-      exit(1);
+      if ((posix_memalign((void **) &log_segment_header[i], 512, sizeof(LogSegmentHeader))) != 0) {
+	fprintf(stderr, "posix_memalign failed\n");
+	exit(1);
+      }
     }
-    int ret = read(log_fd, header, sizeof(LogHeader));
+    
+    /* 初めに使うチャンクログ領域とログファイルヘッダを初期化する */
+    clear_log(0);
+    int ret = read(log_fd, log_segment_header[0], sizeof(LogSegmentHeader));
     if(-1 == ret){
 	cout << "log file open error" << endl;
       perror("read"); exit(1);
     }
   }
 
+  /* 
+     double buffering と chunksizeのアラインメントの操作を含む。
+     この関数はinsertロックを保持した状態で呼ばれ。
+     この関数内部でinsertロックを開放する。
+     すなわち、この関数を呼び出した側で二重にinsertロックを開放してはならない。
+   */
+  void
+  flush(){
+    int _double_buffer_flag = getDoubleBufferFlag();
+    size_t _chunk_size = getChunkSize();
+
+    /* チャンクを切り替え */
+    toggle_chunk();
+
+    mtx_for_write.lock();
+    mtx_for_insert.unlock();  
+    /* この時点で、切り替わったチャンクにログを挿入可能 */
+    
+    nolock_flush(_double_buffer_flag, _chunk_size);
+    mtx_for_write.unlock();
+  }
+
+  void
+  toggle_chunk(){
+    toggle_buffer();
+    log_segment_header[double_buffer_flag] = log_segment_header[!double_buffer_flag];
+    clear_log(double_buffer_flag);
+  }
+
   /*
-    logHeaderはbase_addrに位置し、Logがその後に続く
+    logHeaderはsegment_base_addrに位置し、Logがその後に続く
    */
   void 
-  flush(int flag, LogHeader *header, size_t nlog)
+  nolock_flush(int _select_buffer, size_t _chunk_size)
   {
-    uint64_t save_count = header->count;
-    header->count += nlog;
+    uint64_t _file_size_before = log_segment_header[_select_buffer]->fileSize;
+    log_segment_header[_select_buffer]->fileSize += _chunk_size;
 
-    lseek(log_fd, base_addr, SEEK_SET);
-    if(-1 == write(log_fd, header, sizeof(LogHeader))){;
-      perror("write(LogHeader)"); exit(1);
-    }
-
-    off_t pos = base_addr + sizeof(LogHeader) + (save_count * sizeof(Log));
-
-    //    cout << "flush(): base_addr=" << base_addr << ", pos=" << pos << endl;
-
-    lseek(log_fd, pos, SEEK_SET);
-    // lseek(log_fd, 0, SEEK_END);
-    // fusionではSEEK_ENDできない
     
-    if(-1 == write(log_fd, logs[flag], sizeof(Log)*nlog)){
-      perror("write(Log)"); exit(1);
+    /* チャンクサイズをチャンクの先頭に記録 */
+    memcpy(log_buffer_body, &_chunk_size, sizeof(_chunk_size));
+
+
+    /* チャンクログの書き込み開始地点にlseek */
+    off_t write_pos = segment_base_addr + fileSizeBefore; 
+    lseek(log_fd, pos, SEEK_SET);
+
+    if(-1 == write(log_fd, log_buffer_body[_select_buffer], _chunk_size)){ 
+      perror("write(ChunkLog)"); exit(1);
+    }
+  
+    /* ログセグメントの先頭(ログセグメントヘッダの買い込み開始地点)にlseek */
+    lseek(log_fd, segment_base_addr, SEEK_SET);
+    if(-1 == write(log_fd, log_segment_header[_select_buffer], sizeof(LogSegmentHeader))){
+      perror("write(LogSegmentHeader)"); exit(1);
     }
     fsync(log_fd);
-
-    // std::cout << "LogBuffer[" << th_id << "] flush " << size() << " logs from " << pos << "." << std::endl;
-    
-    //    clear();
   }
 
-
-  int getDoubleBufferFlag(){
+  int 
+  getDoubleBufferFlag(){
     return double_buffer_flag;
-  }
-  size_t getSize(){
-    return idx;
-  }
-  bool full(){
-    return idx == MAX_LOG_SIZE;
-  }
-  bool empty(){
-    return idx == 0;
-  }
-  void push(const Log &log){
-    if(getSize() >= MAX_LOG_SIZE){
-      perror("push");
-      exit(1);
-    }
-
-    logs[double_buffer_flag][idx] = log;
-    idx++;
-
-    if(log.Type == END)
-      num_commit++;
-
-    //    std::cout << "idx: " << idx << std::endl;
-  }
-
-  LSN_and_Offset next_lsn(){
-    LSN_and_Offset ret;
-    off_t pos;
-    
-    pos = base_addr + sizeof(LogHeader) + (header->count + getSize()) * sizeof(Log);
-    ret.second = pos;
-
-#ifndef FIO
-    ret.first = pos;
-    ARIES_SYSTEM::master_record.system_last_lsn = pos;
-#else
-    ret.first = __sync_fetch_and_add(&ARIES_SYSTEM::master_record.system_last_lsn,1);
-    // int old, new_val;
-    // do {
-    //   old = ARIES_SYSTEM::master_record.system_last_lsn;
-    //   new_val = old+1;
-    //   if(CAS(&ARIES_SYSTEM::master_record.system_last_lsn, old, new_val))
-    // 	break;
-    //   else
-    // 	cas_miss[th_id]++;
-    // }while(1);
-#endif    
-
-    return ret;
-  }
-  
-  uint64_t
-  next_offset(){
-    uint64_t pos = base_addr + sizeof(LogHeader) + (header->count + getSize()) * sizeof(Log);
-    return pos;
   }
 
   void
@@ -191,6 +164,79 @@ class LogBuffer{
     double_buffer_flag = double_buffer_flag?0:1; 
   }
 
+  size_t
+  getChunkSize(){
+    size_t _chunk_size = getPtrOnChunk();
+    if(_chunk_size % 512 != 0){
+      _chunk_size += (512 - _chunk_size % 512);
+    }
+    return _chunk_size;
+  }
+
+  size_t
+  getPtrOnChunk(){
+    return ptr_on_chunk;
+  }
+
+  bool
+  ableToAdd(size_t lsize){
+    return ptr_on_chunk + lsize <=  MAX_CHUNK_LOG_SIZE;
+  }
+
+  bool
+  empty(){
+    return ptr_on_chunk == sizeof(size_t);
+  }
+
+  void
+  push(Log *_log, FieldLogList *_field_log_list){
+    FieldLogList *p;
+    
+    if(getPtrOnChunk() + _log->totalLength >= MAX_CHUNK_SIZE){
+      perror("can't push");
+      exit(1);
+    }
+    memcpy(&log_buffer_body[double_buffer_flag][ptr_on_chunk], _log, sizeof(Log));
+    ptr_on_chunk += sizeof(Log);
+
+    for(p = _fieldLogList; p != NULL; p = p->nxt){ // fieldLogListが最初からNULLの場合は何もしない
+      memcpy(&log_buffer_body[double_buffer_flag][ptr_on_chunk], p, sizeof(size_t)*2); // fieldOffsetとfieldLengthのcopy
+      ptr_on_chunk += sizeof(size_t)*2;
+      memcpy(&log_buffer_body[double_buffer_flag][ptr_on_chunk], p->before, p->fieldLength);
+      ptr_on_chunk += p->fieldLength;
+      memcpy(&log_buffer_body[double_buffer_flag][ptr_on_chunk], p->after, p->fieldLength);
+      ptr_on_chunk += p->fieldLength;
+    }
+
+    if(_log->type == END)
+      num_commit++;
+
+    //    std::cout << "ptr_on_chunk: " << ptr_on_chunk << std::endl;
+  }
+
+  LSN_and_Offset
+  next_lsn_and_offset(){
+    LSN_and_Offset _ret;
+    off_t _pos = next_offset();
+    
+    _ret.second = _pos;
+
+#ifdef FIO
+    _ret.first = __sync_fetch_and_add(&ARIES_SYSTEM::master_record.system_last_lsn, 1);
+#else
+    /* この時点で既にインサートロックを獲得している */
+    _ret.first = _pos; // Normal WALではLSNとoffsetは等しい
+    ARIES_SYSTEM::master_record.system_last_lsn = _pos; // システムのGlobalLSNの更新
+#endif    
+
+    return _ret;
+  }
+  
+  uint64_t
+  next_offset(){
+    uint64_t pos = segment_base_addr + log_segment_header[getDoubleBufferFlag()]->fileSize + getPtrOnChunk();
+    return pos;
+  }
 };
 
 static LogBuffer logBuffer[MAX_WORKER_THREAD];
@@ -232,106 +278,60 @@ Logger::init(){
 }
 
 int 
-Logger::log_write(Log *log, int th_id){
-#ifndef FIO
-  th_id = 0;
-  logBuffer[th_id].mtx_for_insert.lock();  
-#endif
-
-  LSN_and_Offset lao;
-
-  lao = logBuffer[th_id].next_lsn();
-  log->LSN = lao.first;
-  log->Offset = lao.second;
-  log->file_id = th_id;
-
-  logBuffer[th_id].push(*log);
-
-  if( (log->Type == END && logBuffer[th_id].num_commit == num_group_commit ) || logBuffer[th_id].full() ){
-
-    int tmp_flag = logBuffer[th_id].getDoubleBufferFlag();
-    //    LogHeader *tmp_header = logBuffer[th_id].header;
-    LogHeader *tmp_header;
-    size_t tmp_size = logBuffer[th_id].getSize();
-
-    if ((posix_memalign((void **) &tmp_header, 512, sizeof(LogHeader))) != 0)
-      {
-        fprintf(stderr, "posix_memalign failed\n");
-	exit(1);
-      }
-
-    *tmp_header = *(logBuffer[th_id].header);
-
-    /* ログバッファを切り替えて、ヘッダを更新 */
-    logBuffer[th_id].toggle_buffer();
-    logBuffer[th_id].header->count += tmp_size;
-    logBuffer[th_id].clear(); // idxとnum_commitの値を初期化する
+Logger::log_write(Log *_log, FieldLogList *_field_log_list, int _th_id){
+  LSN_and_Offset _lsn_and_offset;
+  bool _push_failed = true;
 
 #ifndef FIO
-    logBuffer[th_id].mtx_for_write.lock();
-    logBuffer[th_id].mtx_for_insert.unlock();  
+  _th_id = 0;
 #endif
+  logBuffer[_th_id].mtx_for_insert.lock();  
 
-    logBuffer[th_id].flush(tmp_flag, tmp_header, tmp_size);
-#ifndef FIO
-    logBuffer[th_id].mtx_for_write.unlock();
-#endif
 
+
+  _lsn_and_offset = logBuffer[_th_id].next_lsn_and_offset();
+  _log->lsn = _lsn_and_offset.first;
+  _log->offset = _lsn_and_offset.second;
+  _log->fileId = _th_id;
+  
+  do(_push_success){
+    if(logBuffer[_th_id].ableToAdd(log->totalLength)){
+      logBuffer[_th_id].push(log, fieldLogList);
+    } else {
+      logBuffer[_th_id].flush(); // flush()の中でinsertロックを開放している
+      logBuffer[_th_id].mtx_for_insert.lock(); // 再度insertロックの獲得を試みる
+      _push_failed = false;
+    }
+  }while(_push_failed);
+
+  if( log->type == END && logBuffer[th_id].num_commit == NUM_GROUP_COMMIT ){
+    logBuffer[th_id].flush(); // flush()の中でinsertロックを開放している
     return 0;
   }
 
-#ifndef FIO
-  logBuffer[th_id].mtx_for_insert.unlock();  
-#endif
-
+  logBuffer[_th_id].mtx_for_insert.unlock();  
   return 0;
 }
 
 
-/* insert lockを獲得した後、write_lockを獲得して、強制的にflushする */
+/* ログバッファのフラッシュを行う */
 void
 Logger::log_flush(int th_id){
 #ifndef FIO
   th_id = 0;
+#endif
   logBuffer[th_id].mtx_for_insert.lock();  
-#endif
-
-  int tmp_flag = logBuffer[th_id].getDoubleBufferFlag();
-  //    LogHeader *tmp_header = logBuffer[th_id].header;
-  LogHeader *tmp_header;
-  size_t tmp_size = logBuffer[th_id].getSize();
-
-  if ((posix_memalign((void **) &tmp_header, 512, sizeof(LogHeader))) != 0)
-    {
-      fprintf(stderr, "posix_memalign failed\n");
-      exit(1);
-    }
-
-  *tmp_header = *(logBuffer[th_id].header);
-
-  /* ログバッファを切り替えて、ヘッダを更新 */
-  logBuffer[th_id].toggle_buffer();
-  logBuffer[th_id].header->count += tmp_size;
-  logBuffer[th_id].clear(); // idxとnum_commitの値を初期化する
-
-#ifndef FIO
-  logBuffer[th_id].mtx_for_write.lock();
-  logBuffer[th_id].mtx_for_insert.unlock();  
-#endif
-
-  logBuffer[th_id].flush(tmp_flag, tmp_header, tmp_size);
-#ifndef FIO
-  logBuffer[th_id].mtx_for_write.unlock();
-#endif
+  logBuffer[th_id].flush(); // insertロックはLogger.flush()の中で開放される
 }
 
-
-/* lockを獲得しないので、ワーカが競合する時には使えない */
+/* 全てのログバッファのフラッシュを行う(システム終了時) */
 void
 Logger::log_all_flush(){
-  for(int i=0;i<MAX_WORKER_THREAD;i++)
-    if(!logBuffer[i].empty())
-      logBuffer[i].flush(logBuffer[i].getDoubleBufferFlag(), logBuffer[i].header, logBuffer[i].getSize());
+  for(int i=0;i<MAX_WORKER_THREAD;i++){
+    if(!logBuffer[i].empty()){
+      logBuffer[i].flush();
+    }
+  }
 }
 
 uint64_t

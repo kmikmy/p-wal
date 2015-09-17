@@ -18,7 +18,7 @@
 #define PAGE_N (4096*16)
 #define MAX_UPDATE 100
 #define MAX_WORKER_THREAD 50
-#define LOG_OFFSET (1073741824) // 1GB
+
 
 
 
@@ -64,10 +64,6 @@ typedef std::map<uint32_t, Transaction> TransTable;
  */
 typedef Transaction DistributedTransTable;
 
-typedef struct{
-  uint64_t count;
-  char padding[504];
-} LogHeader; /**/
 
 typedef struct {
   uint64_t mr_chkp;
