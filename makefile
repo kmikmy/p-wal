@@ -3,7 +3,7 @@
 # $^: 全ての依存するファイル名
 # $<: 最初の依存するファイル名(１個１個コンパイルするときにつかう)
 program = aries
-objs = main.o transaction.o system.o logger.o update.o global.o buffer.o queue_mgr.o recovery.o dpt.o plugin/tpc-c/new-order.o plugin/tpc-c/tpcc_table.o plugin/tpc-c/tpcc_util.o
+objs = main.o schema.o transaction.o system.o logger.o update.o global.o buffer.o queue_mgr.o dpt.o # recovery.o plugin/tpc-c/new-order.o plugin/tpc-c/tpcc_table.o plugin/tpc-c/tpcc_util.o
 srcs = $(objs:%.o=%.c)
 CC = g++
 CFLAGS = -g -Wall -std=c++0x -lpthread -lprofiler -O2
@@ -22,7 +22,7 @@ clean:
 aries: $(objs)
 	$(CC) $(CFLAGS) -c logger.cpp
 	$(CC) $(CFLAGS) -c system.cpp
-	$(CC) $(CFLAGS) -c recovery.cpp
+#	$(CC) $(CFLAGS) -c recovery.cpp
 	$(CC) $(CFLAGS) -c queue_mgr.cpp
 	$(CC) $(CFLAGS) -o $(program).exe $^
 
@@ -33,7 +33,7 @@ aries_batch: $(objs)
 aries_fio: $(objs)
 	$(CC) $(CFLAGS) -DFIO -c logger.cpp 
 	$(CC) $(CFLAGS) -DFIO -c system.cpp
-	$(CC) $(CFLAGS) -DFIO -c recovery.cpp
+#	$(CC) $(CFLAGS) -DFIO -c recovery.cpp
 	$(CC) $(CFLAGS) -c queue_mgr.cpp	
 	$(CC) $(CFLAGS) -o $(program)_fio.exe $(objs)
 

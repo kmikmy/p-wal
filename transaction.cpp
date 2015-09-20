@@ -7,9 +7,9 @@
 #include <map>
 #include <set>
 #include <algorithm>
-#include "plugin/tpc-c/include/tpcc.h"
+//#include "plugin/tpc-c/include/tpcc.h"
 
-Constant g_c;
+//Constant g_c;
 
 #define EX1
 //#define EX10
@@ -30,8 +30,7 @@ extern void begin(uint32_t,int);
 extern void end(uint32_t,int);
 extern void WAL_update(OP op, uint32_t xid, int page_id, int th_id);
 
-
-std::istream& 
+std::istream&
 operator>>( std::istream& is, T_Mode& i )
 {
   int tmp ;
@@ -109,17 +108,18 @@ start_transaction_simple(uint32_t xid, int th_id)
 
 void
 start_transaction_new_order(uint32_t xid, int thId) {
-  XNewOrder x(xid, thId, g_c);
-  x.run();
+  //  XNewOrder x(xid, thId, g_c);
+  //  x.run();
 }
 
 void
 start_transaction(uint32_t xid, int thId) {
-  if(W > 0){
-    start_transaction_new_order(xid, thId);
-  } else {
-    start_transaction_simple(xid, thId);
-  }
+  //  if(W > 0){
+  //    start_transaction_new_order(xid, thId);
+  //  } else {
+  //    start_transaction_simple(xid, thId);
+  //  }
+  start_transaction_simple(xid, thId);
 }
 /*
   逐次でトランザクションを num 件実行する。

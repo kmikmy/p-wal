@@ -1,4 +1,5 @@
 #include "include/ARIES.h"
+#include "include/schema.h"
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
@@ -6,7 +7,7 @@
 #include <set>
 #include <sys/time.h>
 #include <pthread.h>
-#include "plugin/tpc-c/include/tpcc.h"
+//#include "plugin/tpc-c/include/tpcc.h"
 
 // #define READ_MODE 1
 
@@ -152,16 +153,15 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
 
   Log log;
   //   LSNはログを書き込む直前に決定する
-  log.TransID = xid;
-  log.Type = UPDATE;
-  log.PageID = page_id;
+  log.trans_id = xid;
+  log.type = UPDATE;
+  log.page_id = page_id;
 
-  log.PrevLSN = dist_trans_table[th_id].LastLSN;
-  log.PrevOffset = dist_trans_table[th_id].LastOffset;
-  log.UndoNxtLSN = 0; // UndoNxtLSNがログに書かれるのはCLRのみ.
-  log.UndoNxtOffset = 0;
-  log.op=op;
-  log.before = pbuf->page.value;
+  log.prev_lsn = dist_trans_table[th_id].LastLSN;
+  log.prev_offset = dist_trans_table[th_id].LastOffset;
+  log.undo_nxt_lsn = 0; // UndoNxtLSNがログに書かれるのはCLRのみ.
+  log.undo_nxt_offset = 0;
+  //  log.before = pbuf->page.value;
 
   switch(op.op_type){
   case INC: pbuf->page.value += op.amount; break;
@@ -169,19 +169,19 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
   case SUBST: pbuf->page.value = op.amount; break;
   default: break;
   }
-  log.after = pbuf->page.value;
+  //  log.after = pbuf->page.value;
 
   //  ARIES_SYSTEM::transtable_debug();
-  
-  Logger::log_write(&log, th_id);
-  pbuf->page.page_LSN = log.LSN;
 
-  
-  dist_trans_table[th_id].LastLSN = log.LSN;
-  dist_trans_table[th_id].LastOffset = log.Offset;
-  dist_trans_table[th_id].UndoNxtLSN = log.LSN; // undoできる非CLRレコードの場合はUndoNxtLSNはLastLSNと同じになる
-  dist_trans_table[th_id].UndoNxtOffset = log.Offset;
-  
+  Logger::log_write(&log, NULL, th_id);
+  pbuf->page.page_LSN = log.lsn;
+
+
+  dist_trans_table[th_id].LastLSN = log.lsn;
+  dist_trans_table[th_id].LastOffset = log.offset;
+  dist_trans_table[th_id].UndoNxtLSN = log.lsn; // undoできる非CLRレコードの場合はUndoNxtLSNはLastLSNと同じになる
+  dist_trans_table[th_id].UndoNxtOffset = log.offset;
+
   //  cout << "[Before Update]" << endl;
   //  cout << "page[" << p.page_id << "]: page_LSN=" << p.page_LSN << ", value=" << p.value << endl;
 
@@ -199,44 +199,93 @@ void
 begin(uint32_t xid, int th_id=0){
   Log log;
   memset(&log,0,sizeof(log));
-  log.TransID = xid;
-  log.Type = BEGIN;
+  log.trans_id = xid;
+  log.type = BEGIN;
 
-  Logger::log_write(&log,th_id);
+  Logger::log_write(&log, NULL, th_id);
 
   dist_trans_table[th_id].TransID = xid;
-  dist_trans_table[th_id].LastLSN = log.LSN;
-  dist_trans_table[th_id].LastOffset = log.Offset;
-  dist_trans_table[th_id].UndoNxtLSN = log.LSN; /* BEGIN レコードは END レコードによってコンペンセーションされる. */
-  dist_trans_table[th_id].LastOffset = log.Offset;
-  
+  dist_trans_table[th_id].LastLSN = log.lsn;
+  dist_trans_table[th_id].LastOffset = log.offset;
+  dist_trans_table[th_id].UndoNxtLSN = log.lsn; /* BEGIN レコードは END レコードによってコンペンセーションされる. */
+  dist_trans_table[th_id].LastOffset = log.offset;
+
 
 #ifdef DEBUG
-  Logger::log_debug(log);  
+  Logger::log_debug(log);
 #endif
 }
 
-void 
+void
 end(uint32_t xid, int th_id=0){
   Log log;
   memset(&log,0,sizeof(log));
-  log.TransID = xid;
-  log.Type = END;
-  log.PrevLSN = dist_trans_table[th_id].LastLSN;
-  log.PrevOffset = dist_trans_table[th_id].LastOffset;
-  log.UndoNxtLSN = 0; /* 一度 END ログが書かれたトランザクションは undo されることはない */
-  log.UndoNxtOffset = 0; 
+  log.trans_id = xid;
+  log.type = END;
+  log.prev_lsn = dist_trans_table[th_id].LastLSN;
+  log.prev_offset = dist_trans_table[th_id].LastOffset;
+  log.undo_nxt_lsn = 0; /* 一度 END ログが書かれたトランザクションは undo されることはない */
+  log.undo_nxt_offset = 0;
 
-  Logger::log_write(&log,th_id);
+  Logger::log_write(&log, NULL, th_id);
 
   /* dist_transaction_tableのエントリを削除する. */
   memset(&dist_trans_table[th_id], 0, sizeof(DistributedTransTable));
 
 #ifdef DEBUG
-  Logger::log_debug(log);  
+  Logger::log_debug(log);
 #endif
 }
 
+void
+update(const char* table_name, QueryArg *q, int update_field_cnt, uint32_t page_id, uint32_t xid, uint32_t thId){
+  Log log;
+  FieldLogList *p;
+  TSchema *tableSchema = MasterSchema::getTableSchemaPtr(table_name);
+
+  //  lock()を取りたい．
+
+  //   LSNはログを書き込む直前に決定する
+  log.trans_id = xid;
+  log.type = UPDATE;
+  log.page_id = page_id;
+
+  log.prev_lsn = dist_trans_table[thId].LastLSN;;
+  log.prev_offset = dist_trans_table[thId].LastOffset;
+  log.undo_nxt_lsn = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
+  log.undo_nxt_offset = 0;
+
+  /* 以下からTPC-C用に適用したフィールド */
+  strncpy(log.table_name, table_name, strlen(table_name)+1);
+  log.field_cnt = update_field_cnt;
+
+  size_t total_field_length=0;
+  try{
+    p = new FieldLogList[update_field_cnt];
+  } catch(std::bad_alloc e){
+    PERR("new");
+  }
+  for(int i=0;i < update_field_cnt;i++, q = q->nxt){
+    if(i > 0){
+      p[i-1].nxt = &p[i];
+    }
+
+    FInfo finfo = tableSchema->getFieldInfo(q->field_name);
+    p[i].fieldOffset = finfo.offset;
+    p[i].fieldLength = finfo.length;
+    p[i].before = q->before;
+    p[i].before = q->after;
+    p[i].nxt = NULL;
+
+    total_field_length += sizeof(size_t)*2 + finfo.length*2;
+  }
+  log.total_field_length = total_field_length;
+  log.total_length = total_field_length + sizeof(LogRecordHeader);
+
+  Logger::log_write(&log, p, thId);
+
+  delete[] p;
+}
 
 /*
   rollback()内ではトランザクションテーブルからエントリを削除しない.
@@ -264,69 +313,69 @@ rollback(uint32_t xid, int th_id){
   while(log_offset != 0){ // lsnが0になるのはprevLSNが0のBEGINログを処理した後
     lseek(log_fd, log_offset, SEEK_SET);
 
-    int ret = read(log_fd, &log, sizeof(Log));  
+    int ret = read(log_fd, &log, sizeof(Log));
     if(ret == -1){
       perror("read"); exit(1);
     }
-    
+
     if(ret == 0){
       cout << "illegal read" << endl;
       exit(1);
     }
 
-#ifdef DEBUG    
+#ifdef DEBUG
     Logger::log_debug(log);
 #endif
-    
-    if (log.Type == UPDATE || log.Type == INSERT){
-      int idx=log.PageID;
 
-      if(log.Type == UPDATE){
-	switch((int)log.tid){
+    if (log.type == UPDATE || log.type == INSERT){
+      int idx=log.page_id;
+
+      if(log.type == UPDATE){
+	switch((kTableType)log.table_id){
 	case SIMPLE:
-	  page_table[idx].page.value = log.before;	  
-	  page_table[idx].page.page_LSN = log.PrevLSN; 
+	  //	  page_table[idx].page.value = log.before;
+	  page_table[idx].page.page_LSN = log.prev_lsn;
 	  break;
 	case WAREHOUSE:
-	  memcpy(&Warehouse::pages[idx-1], log.padding, sizeof(PageWarehouse));
-	  Warehouse::pages[idx-1].page_LSN = log.PrevLSN; 
+	  //	  memcpy(&Warehouse::pages[idx-1], log.padding, sizeof(PageWarehouse));
+	  //  Warehouse::pages[idx-1].page_LSN = log.prev_lsn;
 	  break;
 	case DISTRICT:
-	  memcpy(&District::pages[idx-1], log.padding, sizeof(PageDistrict));
-	  District::pages[idx-1].page_LSN = log.PrevLSN; 
+	  //	  memcpy(&District::pages[idx-1], log.padding, sizeof(PageDistrict));
+	  //	  District::pages[idx-1].page_LSN = log.prev_lsn;
 	  break;
 	case CUSTOMER:
-	  memcpy(&Customer::pages[idx-1], log.padding, sizeof(PageCustomer));
-	  Customer::pages[idx-1].page_LSN = log.PrevLSN; 
+	  //	  memcpy(&Customer::pages[idx-1], log.padding, sizeof(PageCustomer));
+	  //	  Customer::pages[idx-1].page_LSN = log.prev_lsn;
 	  break;
 	case HISTORY:
 	  /* not defined */
 	  break;
 	case ORDER:
 	  // memcpy(&Order::pages[idx-1], log.padding, sizeof(PageOrder));
-	  Order::pages[idx-1].page_LSN = log.PrevLSN; 
+	  //	  Order::pages[idx-1].page_LSN = log.prev_lsn;
 	  break;
 	case ORDERLINE:
 	  // memcpy(&OrderLine::pages[idx-1], log.padding, sizeof(PageOrderLine));
-	  OrderLine::pages[idx-1].page_LSN = log.PrevLSN; 
+	  //	  OrderLine::pages[idx-1].page_LSN = log.prev_lsn;
 	  break;
 	case NEWORDER:
 	  // memcpy(&NewOrder::pages[idx-1], log.padding, sizeof(PageNewOrder));
-	  NewOrder::pages[idx-1].page_LSN = log.PrevLSN; 
+	  //	  NewOrder::pages[idx-1].page_LSN = log.prev_lsn;
 	  break;
 	case ITEM:
-	  memcpy(&Item::pages[idx-1], log.padding, sizeof(PageItem));
-	  Item::pages[idx-1].page_LSN = log.PrevLSN; 
+	  //	  memcpy(&Item::pages[idx-1], log.padding, sizeof(PageItem));
+	  //	  Item::pages[idx-1].page_LSN = log.prev_lsn;
 	  break;
 	case STOCK:
-	  memcpy(&Stock::pages[idx-1], log.padding, sizeof(PageStock));
-	  Stock::pages[idx-1].page_LSN = log.PrevLSN; 
+	  //	  memcpy(&Stock::pages[idx-1], log.padding, sizeof(PageStock));
+	  //	  Stock::pages[idx-1].page_LSN = log.prev_lsn;
 	  break;
 	default:
 	  PERR("switch");
 	}
-      } if(log.Type == INSERT){
-	switch((int)log.tid){
+      } if(log.type == INSERT){
+	switch((int)log.table_id){
 	case SIMPLE:
 	  break;
 	case WAREHOUSE:
@@ -339,13 +388,13 @@ rollback(uint32_t xid, int th_id){
 	  /* not defined */
 	  break;
 	case ORDER:
-	  Order::pages[idx-1].delete_flag = true;
+	  //	  Order::pages[idx-1].delete_flag = true;
 	  break;
 	case ORDERLINE:
-	  OrderLine::pages[idx-1].delete_flag = true;
+	  //	  OrderLine::pages[idx-1].delete_flag = true;
 	  break;
 	case NEWORDER:
-	  NewOrder::pages[idx-1].delete_flag = true;
+	  //	  NewOrder::pages[idx-1].delete_flag = true;
 	  break;
 	case ITEM:
 	  break;
@@ -359,57 +408,58 @@ rollback(uint32_t xid, int th_id){
 
       Log clog;
       memset(&clog,0,sizeof(Log));
-      clog.Type = COMPENSATION;
-      clog.TransID = log.TransID;
+      clog.type = COMPENSATION;
+      clog.trans_id = log.trans_id;
 
-      clog.PageID = log.PageID;
-      clog.tid = log.tid;
-      clog.UndoNxtLSN = log.PrevLSN;
-      clog.UndoNxtOffset = log.PrevOffset;
+      clog.page_id = log.page_id;
+      clog.table_id = log.table_id;
+      clog.undo_nxt_lsn = log.prev_lsn;
+      clog.undo_nxt_offset = log.prev_offset;
       // clog.before isn't needed because compensation log record is redo-only.
-      clog.after = log.before;
 
-      clog.PrevLSN = dist_trans_table[th_id].LastLSN;
-      clog.PrevOffset = dist_trans_table[th_id].LastOffset;
+      //      clog.after = log.before;
+
+      clog.prev_lsn = dist_trans_table[th_id].LastLSN;
+      clog.prev_offset = dist_trans_table[th_id].LastOffset;
 
       // compensation log recordをどこに書くかという問題はひとまず置いておく
       // とりあえず全部id=0のログブロックに書く
-      ret = Logger::log_write(&clog, 0); 
+      ret = Logger::log_write(&clog, NULL, 0);
 
 #ifdef DEBUG
       Logger::log_debug(clog);
 #endif
 
-      dist_trans_table[th_id].LastLSN = clog.LSN;
-      dist_trans_table[th_id].LastOffset = clog.Offset;
-      dist_trans_table[th_id].UndoNxtLSN = clog.UndoNxtLSN;
-      dist_trans_table[th_id].UndoNxtOffset = clog.UndoNxtOffset;
+      dist_trans_table[th_id].LastLSN = clog.lsn;
+      dist_trans_table[th_id].LastOffset = clog.offset;
+      dist_trans_table[th_id].UndoNxtLSN = clog.undo_nxt_lsn;
+      dist_trans_table[th_id].UndoNxtOffset = clog.undo_nxt_offset;
 
-      log_offset = log.PrevOffset;
+      log_offset = log.prev_offset;
       continue;
-    } else if(log.Type == COMPENSATION){
-      log_offset = log.UndoNxtOffset;
+    } else if(log.type == COMPENSATION){
+      log_offset = log.undo_nxt_offset;
       continue;
-    } else if(log.Type == BEGIN){
+    } else if(log.type == BEGIN){
       Log end_log;
       memset(&end_log,0,sizeof(Log));
-      end_log.Type = END;
-      end_log.TransID = log.TransID;
+      end_log.type = END;
+      end_log.trans_id = log.trans_id;
 
-      end_log.PrevLSN = dist_trans_table[th_id].LastLSN;
-      end_log.PrevOffset = dist_trans_table[th_id].LastOffset;
-      end_log.UndoNxtLSN = 0;
-      end_log.UndoNxtOffset = 0;
+      end_log.prev_lsn = dist_trans_table[th_id].LastLSN;
+      end_log.prev_offset = dist_trans_table[th_id].LastOffset;
+      end_log.undo_nxt_lsn = 0;
+      end_log.undo_nxt_offset = 0;
 
-      Logger::log_write(&end_log, 0);
+      Logger::log_write(&end_log, NULL, 0);
 #ifdef DEBUG
       Logger::log_debug(end_log);
 #endif
 
       /* dist_transaction_tableのエントリを削除する. */
-      memset(&dist_trans_table[th_id], 0, sizeof(DistributedTransTable));    
+      memset(&dist_trans_table[th_id], 0, sizeof(DistributedTransTable));
     }
-    log_offset = log.PrevOffset;
+    log_offset = log.prev_offset;
   }
 
   close(log_fd);

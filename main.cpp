@@ -63,7 +63,7 @@ int main(int argc, char *argv[]){
       switch(result){
       case 'w':
 	str = optarg;
-	W = atoi(str.c_str());
+	//	W = atoi(str.c_str());
 	printf("option %c applied with %s\n", result, str.c_str());
 	break;
       case '?':   // invalid option
@@ -81,7 +81,7 @@ int main(int argc, char *argv[]){
   return 0;
 }
 
-static void 
+static void
 fixed_thread_mode(int n,int nthread){
   struct timeval begin, end;
 

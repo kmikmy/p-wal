@@ -2,6 +2,7 @@
 #define _ARIES
 #include "debug.h"
 #include "log.h"
+#include "query.h"
 #include <mutex>
 #include <cstdlib>
 #include <sys/types.h>
@@ -19,15 +20,12 @@
 #define MAX_UPDATE 100
 #define MAX_WORKER_THREAD 50
 
-
-
-
 enum STATE { U,P,C }; // UNCOMMITED, PREPARED, COMMITED
 
 typedef struct {
   uint64_t page_LSN;
   int pageID;
-  int value;  
+  int value;
 } Page;
 
 typedef struct {
@@ -49,9 +47,6 @@ typedef struct {
   uint64_t UndoNxtLSN;
   uint64_t UndoNxtOffset;
 } Transaction;
-
-
-
 
 /*
   TransTableはただのmap。スレッドセーフではないのでリカバリ時にのみ使用する。
@@ -89,21 +84,4 @@ public:
   static void transtable_debug();
   
 };
-
-class Logger
-{
- private:
-
- public:
-  static const char* logpath;
-  static void set_num_group_commit(int group_param);
-  static int log_write(Log *log, int th_id);
-  static void log_flush(int th_id);
-  static void log_all_flush();
-  static void log_debug(Log log);
-  static void init();
-  static uint64_t read_LSN();
-  static uint64_t current_offset_logfile_for_id(int th_id);
-};
-
 #endif //  _ARIES

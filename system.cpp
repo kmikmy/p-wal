@@ -58,8 +58,8 @@ load_master_record(){
   
   if(ARIES_SYSTEM::master_record.last_exit == false ) {
     cout << "[recovery start]" << endl;
-    recovery_trans_table.clear();
-    recovery();
+//    recovery_trans_table.clear();
+//    recovery();
   }
 
   ARIES_SYSTEM::master_record.last_exit = false;
@@ -83,8 +83,8 @@ ARIES_SYSTEM::db_init(int th_num){
   // 分散トランザクションテーブルの生成
   create_dist_trans_table(th_num);
   // tpc-c
-  tpcc_init();
-  tpcc_load();
+  //  tpcc_init();
+  //  tpcc_load();
 }
 
 uint32_t ARIES_SYSTEM::xid_inc(){
@@ -145,10 +145,10 @@ ARIES_SYSTEM::normal_exit()
 void ARIES_SYSTEM::transtable_debug(){
   cout << "++++++++++++++++transaction table++++++++++++++++++" << endl;
   TransTable::iterator it;
-  for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end(); it++){
-    Transaction trans = it->second;
-    cout << "+ [" << trans.TransID << "] " << "State=" << trans.State << ", LastLSN=" << trans.LastLSN << ", UndoNxtLSN=" << trans.UndoNxtLSN << endl;
-  }
+  // for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end(); it++){
+  //   Transaction trans = it->second;
+  //   cout << "+ [" << trans.TransID << "] " << "State=" << trans.State << ", LastLSN=" << trans.LastLSN << ", UndoNxtLSN=" << trans.UndoNxtLSN << endl;
+  // }
   cout << "+++++++++++++++++++++++++++++++++++++++++++++++++++" << endl;
 }
 

@@ -255,7 +255,7 @@ analysis(uint64_t* redo_offsets){
   Log log;
 
 #ifndef FIO
-  LogHeader lh;
+  LogSegmentHeader lh;
   lseek(log_fd, 0, SEEK_SET);
   if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
     perror("read"); exit(1);
@@ -266,7 +266,7 @@ analysis(uint64_t* redo_offsets){
     if(ret == 0) break;
 
 #else
-  std::set<int> exist_flags;  
+  std::set<int> exist_flags;
   AnaLogBuffer alogs[MAX_WORKER_THREAD];
 
   for(int i=0;i<MAX_WORKER_THREAD;i++){

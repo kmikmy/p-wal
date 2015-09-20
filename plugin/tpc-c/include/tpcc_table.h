@@ -254,21 +254,21 @@ class District : public Table{
   }
 
   static uint64_t
-  wal_write(uint32_t xid, PageDistrict *before, PageDistrict *after, uint32_t thId){
+  wal_write(uint32_t xid, FieldLogList *field_log_list, uint32_t thId){
     Log log;
     //   LSNはログを書き込む直前に決定する
-    log.TransID = xid;
+    log.trans_id = xid;
     if(before != NULL){
-      log.Type = UPDATE;
+      log.type = UPDATE;
     } else {
-      log.Type = INSERT;
+      log.type = INSERT;
     }
-    log.PageID = after->page_id;
-    log.tid = DISTRICT;
-    log.PrevLSN = dist_trans_table[thId].LastLSN;
-    log.PrevOffset = dist_trans_table[thId].LastOffset;
-    log.UndoNxtLSN = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
-    log.UndoNxtOffset = 0;
+    log.page_id = after->page_id;
+    log.table_id = DISTRICT;
+    log.prev_lsn = dist_trans_table[thId].LastLSN;
+    log.prev_offset = dist_trans_table[thId].LastOffset;
+    log.undo_nxt_lsn = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
+    log.undo_nxt_offset = 0;
 
     if(before != NULL){
       memcpy(log.padding, before, sizeof(PageDistrict));
@@ -279,8 +279,8 @@ class District : public Table{
 
     dist_trans_table[thId].LastLSN = log.LSN;
     dist_trans_table[thId].LastOffset = log.Offset;
-    dist_trans_table[thId].UndoNxtLSN = log.LSN; // undoできる非CLRレコードの場合はUndoNxtLSNはLastLSNと同じになる
-    dist_trans_table[thId].UndoNxtOffset = log.Offset;
+    dist_trans_table[thId].undo_nxt_lsn = log.LSN; // undoできる非CLRレコードの場合はundo_nxt_lsnはLastLSNと同じになる
+    dist_trans_table[thId].undo_nxt_offset = log.Offset;
 
     return log.LSN;
   }
@@ -463,18 +463,18 @@ public:
     Log log;
 
     //   LSNはログを書き込む直前に決定する
-    log.TransID = xid;
+    log.trans_id = xid;
     if(before != NULL){
-      log.Type = UPDATE;
+      log.type = UPDATE;
     } else {
-      log.Type = INSERT;
+      log.type = INSERT;
     }
-    log.PageID = after->page_id;
-    log.tid = NEWORDER;
-    log.PrevLSN = dist_trans_table[thId].LastLSN;
-    log.PrevOffset = dist_trans_table[thId].LastOffset;
-    log.UndoNxtLSN = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
-    log.UndoNxtOffset = 0;
+    log.page_id = after->page_id;
+    log.table_id = NEWORDER;
+    log.prev_lsn = dist_trans_table[thId].LastLSN;
+    log.prev_offset = dist_trans_table[thId].LastOffset;
+    log.undo_nxt_lsn = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
+    log.undo_nxt_offset = 0;
 
     if(before != NULL){
       memcpy(log.padding, before, sizeof(PageNewOrder));
@@ -485,8 +485,8 @@ public:
 
     dist_trans_table[thId].LastLSN = log.LSN;
     dist_trans_table[thId].LastOffset = log.Offset;
-    dist_trans_table[thId].UndoNxtLSN = log.LSN; // undoできる非CLRレコードの場合はUndoNxtLSNはLastLSNと同じになる
-    dist_trans_table[thId].UndoNxtOffset = log.Offset;
+    dist_trans_table[thId].undo_nxt_lsn = log.LSN; // undoできる非CLRレコードの場合はundo_nxt_lsnはLastLSNと同じになる
+    dist_trans_table[thId].undo_nxt_offset = log.Offset;
 
     return log.LSN;
   }
@@ -570,18 +570,18 @@ public:
   wal_write(uint32_t xid, PageOrder *before, PageOrder *after, int thId){
     Log log;
     //   LSNはログを書き込む直前に決定する
-    log.TransID = xid;
+    log.trans_id = xid;
     if(before != NULL){
-      log.Type = UPDATE;
+      log.type = UPDATE;
     } else {
-      log.Type = INSERT;
+      log.type = INSERT;
     }
-    log.PageID = after->page_id;
-    log.tid = ORDER;
-    log.PrevLSN = dist_trans_table[thId].LastLSN;
-    log.PrevOffset = dist_trans_table[thId].LastOffset;
-    log.UndoNxtLSN = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
-    log.UndoNxtOffset = 0;
+    log.page_id = after->page_id;
+    log.table_id = ORDER;
+    log.prev_lsn = dist_trans_table[thId].LastLSN;
+    log.prev_offset = dist_trans_table[thId].LastOffset;
+    log.undo_nxt_lsn = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
+    log.undo_nxt_offset = 0;
 
     if(before != NULL){
       memcpy(log.padding, before, sizeof(PageOrder));
@@ -592,8 +592,8 @@ public:
 
     dist_trans_table[thId].LastLSN = log.LSN;
     dist_trans_table[thId].LastOffset = log.Offset;
-    dist_trans_table[thId].UndoNxtLSN = log.LSN; // undoできる非CLRレコードの場合はUndoNxtLSNはLastLSNと同じになる
-    dist_trans_table[thId].UndoNxtOffset = log.Offset;
+    dist_trans_table[thId].undo_nxt_lsn = log.LSN; // undoできる非CLRレコードの場合はundo_nxt_lsnはLastLSNと同じになる
+    dist_trans_table[thId].undo_nxt_offset = log.Offset;
 
     return log.LSN;
   }
@@ -814,18 +814,18 @@ class Stock : public Table{
   wal_write(uint32_t xid, PageStock *before, PageStock *after, int thId){
     Log log;
     //   LSNはログを書き込む直前に決定する
-    log.TransID = xid;
+    log.trans_id = xid;
     if(before != NULL){
-      log.Type = UPDATE;
+      log.type = UPDATE;
     } else {
-      log.Type = INSERT;
+      log.type = INSERT;
     }
-    log.PageID = after->page_id;
-    log.tid = STOCK;
-    log.PrevLSN = dist_trans_table[thId].LastLSN;
-    log.PrevOffset = dist_trans_table[thId].LastOffset;
-    log.UndoNxtLSN = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
-    log.UndoNxtOffset = 0;
+    log.page_id = after->page_id;
+    log.table_id = STOCK;
+    log.prev_lsn = dist_trans_table[thId].LastLSN;
+    log.prev_offset = dist_trans_table[thId].LastOffset;
+    log.undo_nxt_lsn = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
+    log.undo_nxt_offset = 0;
 
     if(before != NULL){
       memcpy(log.padding, before, sizeof(PageStock));
@@ -836,8 +836,8 @@ class Stock : public Table{
 
     dist_trans_table[thId].LastLSN = log.LSN;
     dist_trans_table[thId].LastOffset = log.Offset;
-    dist_trans_table[thId].UndoNxtLSN = log.LSN; // undoできる非CLRレコードの場合はUndoNxtLSNはLastLSNと同じになる
-    dist_trans_table[thId].UndoNxtOffset = log.Offset;
+    dist_trans_table[thId].undo_nxt_lsn = log.LSN; // undoできる非CLRレコードの場合はundo_nxt_lsnはLastLSNと同じになる
+    dist_trans_table[thId].undo_nxt_offset = log.Offset;
 
     return log.LSN;
   }
@@ -920,18 +920,18 @@ class OrderLine : public Table{
   wal_write(uint32_t xid, PageOrderLine *before, PageOrderLine *after, int thId){
     Log log;
     //   LSNはログを書き込む直前に決定する
-    log.TransID = xid;
+    log.trans_id = xid;
     if(before != NULL){
-      log.Type = UPDATE;
+      log.type = UPDATE;
     } else {
-      log.Type = INSERT;
+      log.type = INSERT;
     }
-    log.PageID = after->page_id;
-    log.tid = ORDERLINE;
-    log.PrevLSN = dist_trans_table[thId].LastLSN;
-    log.PrevOffset = dist_trans_table[thId].LastOffset;
-    log.UndoNxtLSN = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
-    log.UndoNxtOffset = 0;
+    log.page_id = after->page_id;
+    log.table_id = ORDERLINE;
+    log.prev_lsn = dist_trans_table[thId].LastLSN;
+    log.prev_offset = dist_trans_table[thId].LastOffset;
+    log.undo_nxt_lsn = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
+    log.undo_nxt_offset = 0;
 
     if(before != NULL){
       memcpy(log.padding, before, sizeof(PageOrderLine));
@@ -942,8 +942,8 @@ class OrderLine : public Table{
 
     dist_trans_table[thId].LastLSN = log.LSN;
     dist_trans_table[thId].LastOffset = log.Offset;
-    dist_trans_table[thId].UndoNxtLSN = log.LSN; // undoできる非CLRレコードの場合はUndoNxtLSNはLastLSNと同じになる
-    dist_trans_table[thId].UndoNxtOffset = log.Offset;
+    dist_trans_table[thId].undo_nxt_lsn = log.LSN; // undoできる非CLRレコードの場合はundo_nxt_lsnはLastLSNと同じになる
+    dist_trans_table[thId].undo_nxt_offset = log.Offset;
 
     return log.LSN;
   }
