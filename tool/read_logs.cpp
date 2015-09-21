@@ -9,14 +9,17 @@
 using namespace std;
 
 #ifndef FIO
-#define NUM_MAX_LOGFILE 1
+static const int kNumMaxLogSegment=1;
 static const char* log_path = "/dev/fioa";
 #else
-#define NUM_MAX_LOGFILE 50
+static const int kNumMaxLogSegment=32;
 static const char* log_path = "/dev/fioa";
 //static const char* log_path = "/dev/shm/kamiya/log.dat";
 #endif
 
+
+const int kFirstReadChunkSize = 512;
+const int kMaxFieldLength = 256;
 
 std::ostream& operator<<( std::ostream& os, OP_TYPE& opt){
   switch(opt){
@@ -30,7 +33,7 @@ std::ostream& operator<<( std::ostream& os, OP_TYPE& opt){
   return os;
 }
 
-std::ostream& operator<<( std::ostream& os, TABLE_TYPE& tid){
+std::ostream& operator<<( std::ostream& os, kTableType& tid){
   switch(tid){
   case SIMPLE: os << "SIMPLE"; break;
   case WAREHOUSE: os << "WAREHOUSE"; break;
@@ -47,7 +50,7 @@ std::ostream& operator<<( std::ostream& os, TABLE_TYPE& tid){
   return os;
 }
 
-std::ostream& operator<<( std::ostream& os, LOG_TYPE& type){
+std::ostream& operator<<( std::ostream& os, kLogType& type){
   //  UPDATE, COMPENSATION, PREPARE, END, OSfile_return, BEGIN };
   switch(type){
   case UPDATE: os << "UPDATE"; break;
@@ -57,72 +60,120 @@ std::ostream& operator<<( std::ostream& os, LOG_TYPE& type){
   case END: os << "END"; break;
   case OSfile_return: os << "OSfile_return"; break;
   case INSERT: os << "INSERT"; break;
-
   }
 
   return os;
 }
 
-int main(){
+void
+PosixMemAlignReadOrDie(int fd, char **chunk_buf_dst, uint64_t read_size){
+  if ((posix_memalign((void **) chunk_buf_dst, 512, read_size)) != 0){
+    perror("posix_memalign");
+    exit(1);
+  }
+  if(read(fd, *chunk_buf_dst, read_size) == -1){
+    perror("read");
+    exit(1);
+  }
+}
+
+void
+DisplayFieldLog(FieldLogHeader *flh, char *field_log_body){
+  char *before[kMaxFieldLength], *after[kMaxFieldLength];
+
+  memcpy(before, field_log_body, flh->fieldLength);
+  memcpy(after , field_log_body + flh->fieldLength, flh->fieldLength);
+
+  cout << "offset: " << flh->fieldOffset << ", length: " << flh->fieldLength <<
+    ", before: "  << *(int *)before << ", after: "  << *(int *)after;
+}
+
+void
+DisplayLogRecordHeader(LogRecordHeader *log){
+  cout << "Log[" << log->lsn << ":" << log->offset << "]: TransID=" << log->trans_id << ", file_id=" << log->file_id << ", Type=" << log->type;
+
+  if(log->type != BEGIN && log->type != END)
+    cout << ", table_id=" << log->table_id <<", prev_lsn=" << log->prev_lsn << ", prev_offset=" << log->prev_offset << ", undo_nxt_lsn=" << log->undo_nxt_lsn << ", undo_nxt_offset=" << log->undo_nxt_offset << ", page_id=" << log->page_id;
+  //<< ", before=" << log->before << ", after=" << log->after << ", op.op_type=" << log->op.op_type << ", op.amount=" << log-op.amount;
+
+  cout << endl;
+}
+
+void
+DisplayLogRecord(LogRecordHeader *lrh, Log *log){
+  uint64_t ptr_on_log_record = 0 + sizeof(LogRecordHeader);
+  FieldLogHeader field_log_header;
+
+  DisplayLogRecordHeader(lrh);
+  for(uint32_t i=0; i < lrh->field_num; i++){
+    char *field_log_body = (char *)log + ptr_on_log_record;
+    memcpy(&field_log_header, log + ptr_on_log_record, sizeof(FieldLogHeader));
+    DisplayFieldLog(&field_log_header, field_log_body);
+  }
+}
+
+void
+DisplayChunk(ChunkLogHeader *clh, char *chunk_buffer){
+  uint64_t ptr_on_chunk = 0 + sizeof(ChunkLogHeader);
+  cout << "chunk_size: " << clh->chunk_size << ", log_record_num: " <<
+    clh->log_record_num << endl;
+
+  LogRecordHeader lrh;
+  for(uint32_t i; i < clh->log_record_num; i++){
+    memcpy(&lrh, chunk_buffer+ptr_on_chunk, sizeof(LogRecordHeader));
+    DisplayLogRecord(&lrh, (Log *)chunk_buffer+ptr_on_chunk);
+    ptr_on_chunk += lrh.total_length;
+  }
+}
+
+void
+DisplayLogs(){
   int fd;
-  uint32_t total=0;
+  uint32_t total_log_num=0;
 
   if( (fd = open(log_path,  O_RDONLY)) == -1){
     perror("open");
     exit(1);
   }
 
-
-  off_t base = 0; 
-  for(int i=0;i<NUM_MAX_LOGFILE;i++,base+=LOG_OFFSET){
-
-    lseek(fd, base, SEEK_SET);
-
-    LogHeader* lh;
-    if ((posix_memalign((void **) &lh, 512, sizeof(LogHeader))) != 0)
-      {
-        fprintf(stderr, "posix_memalign failed\n");
-	exit(1);
-      }
-    if(read(fd, lh, sizeof(LogHeader)) == -1){
-      perror("read"); exit(1);
-    }
-    if(lh->count == 0) continue;
-
+  off_t base = 0;
+  for(int i=0;i<kNumMaxLogSegment;i++,base+=LOG_OFFSET){
 
 #ifdef FIO
     printf("\n###   LogFile(%d)   ###\n",i);
 #endif
 
-    cout << "the number of logs is " << lh->count << "" << endl;  
-    total+=lh->count;
+    LogSegmentHeader* lsh = NULL;
+    lseek(fd, base, SEEK_SET);
+    PosixMemAlignReadOrDie(fd, (char **)&lsh, sizeof(LogSegmentHeader));
+    if(lsh->chunk_num == 0) continue;
 
-    Log *log;
-    if ((posix_memalign((void **) &log, 512, sizeof(LogHeader))) != 0)
-      {
-        fprintf(stderr, "posix_memalign failed\n");
-	exit(1);
+    cout << "the number of log is " << lsh->log_num << "" << endl;
+    total_log_num += lsh->log_num;
+
+    for(uint32_t i=0; i < lsh->chunk_num; i++){
+      char *chunk_buffer = NULL;
+
+      PosixMemAlignReadOrDie(fd, (char **)&chunk_buffer, kFirstReadChunkSize);
+
+      ChunkLogHeader clh;
+      memcpy(&clh, chunk_buffer, sizeof(ChunkLogHeader));
+
+      if(clh.chunk_size != kFirstReadChunkSize){
+	lseek(fd, -sizeof(ChunkLogHeader), SEEK_CUR);
+	free(chunk_buffer);
+	PosixMemAlignReadOrDie(fd, &chunk_buffer, clh.chunk_size);
       }
 
-    
-    for(unsigned i=0;i<lh->count;i++){
-
-      int len;
-      if((len = read(fd, log, sizeof(Log))) == -1){
-	perror("read"); exit(1);
-      }    
-      if(len == 0) break;
-      
-      cout << "Log[" << log->LSN << ":" << log->Offset << "]: TransID=" << log->TransID << ", file_id=" << log->file_id << ", Type=" << log->Type;
-      
-      if(log->Type != BEGIN && log->Type != END)
-	cout << ", tid=" << log->tid <<", PrevLSN=" << log->PrevLSN << ", PrevOffset=" << log->PrevOffset << ", UndoNxtLSN=" << log->UndoNxtLSN << ", UndoNxtOffset=" << log->UndoNxtOffset << ", PageID=" << log->PageID << ", before=" << log->before << ", after=" << log->after; // << ", op.op_type=" << log->op.op_type << ", op.amount=" << log-op.amount;
-
-
-      cout << endl;
+      DisplayChunk(&clh, chunk_buffer);
     }
   }
 
-  cout << "# total log is " << total << endl;
+}
+
+int
+main(){
+  DisplayLogs();
+
   return 0;
 }

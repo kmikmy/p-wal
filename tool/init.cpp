@@ -29,14 +29,13 @@ void init(){
   string system_filename = ARIES_HOME;
   cout << system_filename << endl;
   system_filename += "/data/system.dat";
- 
+
   if( (fd = open(system_filename.c_str(), O_RDWR | O_SYNC | O_CREAT, 0666 )) == -1 ){
     perror("open");
     exit(1);
   }
   int len1;
 
-  
   if( (len1 = read(fd, &master_record, sizeof(MasterRecord))) == -1 ){
     perror("read");
     exit(1);
@@ -70,7 +69,7 @@ void init(){
   int log_num = 1;
 #endif
 #ifdef FIO
-  if( (fd = open(log_path, O_WRONLY)) == -1 ){  
+  if( (fd = open(log_path, O_WRONLY)) == -1 ){
     perror("open");
     exit(1);
   }
@@ -85,17 +84,20 @@ void init(){
 
     lseek(fd, base, SEEK_SET);
 
-    LogHeader* lh;
-    if ((posix_memalign((void **) &lh, 512, sizeof(LogHeader))) != 0)
+    LogSegmentHeader* lsh = NULL;
+    if ((posix_memalign((void **) &lsh, 512, sizeof(LogSegmentHeader))) != 0)
       {
         fprintf(stderr, "posix_memalign failed\n");
 	exit(1);
       }
-    if(-1 == write(fd, lh, sizeof(LogHeader))){
+    lsh->chunk_num = 0;
+    lsh->log_num = 0;
+    lsh->segment_size = 0;
+    if(-1 == write(fd, lsh, sizeof(LogSegmentHeader))){
       perror("write");
       exit(1);
     }
   }
- 
+
   close(fd);
 }

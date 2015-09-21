@@ -20,16 +20,17 @@ typedef struct {
 
 #pragma pack(1)
 
-class LogRecordHeader{
- public:
-  size_t totalLength, fieldLength;
-  uint64_t LSN, offset, prevLSN, prevOffset, undoNxtLSN, undoNxtOffset;
-  uint64_t transID, pageID; // TransactionID & PageID
-  int fileID; // File ID
-  kLogType type; // Tyep of log
-  char tableName[kMaxTableNameLen];
-  size_t fieldCnt; // The number of field in the Log
-};
+typedef struct{
+  uint64_t chunk_num;
+  uint64_t log_num;
+  off_t segment_size; // File size
+  char padding[488];
+} LogSegmentHeader; /* 512 Bytes */
+
+typedef struct{
+  uint64_t chunk_size;
+  uint64_t log_record_num;;
+} ChunkLogHeader; /* 512 Bytes */
 
 typedef struct{
   size_t total_length, total_field_length;
@@ -39,19 +40,22 @@ typedef struct{
   kLogType type; // Tyep of log
   kTableType table_id;
   char table_name[kMaxTableNameLen];
-  size_t field_cnt; // The number of field in the Log
+  size_t field_num; // The number of field in the Log
 
-  // この後にフィールドログがN個続く
-  // FieldLog fLog[fieldCnt];
+  // この後に(FieldLog, before value, after value)がN個続く
+  // {
+  // FieldLog fLog
+  // char *before, *aftegr
+  // } * N
 } Log;
+
+typedef Log LogRecordHeader;
 
 typedef struct {
   size_t fieldOffset, fieldLength; // タプルの何バイト目から何バイトの長さの情報
-
   // この後にフィールドの更新前、更新後の値が続く
   //  char before[fieldLength], after[fieldLength];
-} FieldLog;
-
+} FieldLogHeader;
 
 /* Logger::log_write()に渡す型 */
 typedef struct _FieldLogList {
@@ -60,12 +64,6 @@ typedef struct _FieldLogList {
   char *before, *after;
   _FieldLogList *nxt;
 } FieldLogList;
-
-typedef struct{
-  uint64_t chunkNum; // The number of Chunk Log.
-  off_t fileSize; // File size
-  char padding[496];
-} LogSegmentHeader; /* 512 Bytes */
 
 #pragma pack()
 

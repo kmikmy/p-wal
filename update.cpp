@@ -238,7 +238,7 @@ end(uint32_t xid, int th_id=0){
 }
 
 void
-update(const char* table_name, QueryArg *q, int update_field_cnt, uint32_t page_id, uint32_t xid, uint32_t thId){
+update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_id, uint32_t xid, uint32_t thId){
   Log log;
   FieldLogList *p;
   TSchema *tableSchema = MasterSchema::getTableSchemaPtr(table_name);
@@ -257,15 +257,15 @@ update(const char* table_name, QueryArg *q, int update_field_cnt, uint32_t page_
 
   /* 以下からTPC-C用に適用したフィールド */
   strncpy(log.table_name, table_name, strlen(table_name)+1);
-  log.field_cnt = update_field_cnt;
+  log.field_num = update_field_num;
 
   size_t total_field_length=0;
   try{
-    p = new FieldLogList[update_field_cnt];
+    p = new FieldLogList[update_field_num];
   } catch(std::bad_alloc e){
     PERR("new");
   }
-  for(int i=0;i < update_field_cnt;i++, q = q->nxt){
+  for(int i=0;i < update_field_num;i++, q = q->nxt){
     if(i > 0){
       p[i-1].nxt = &p[i];
     }
