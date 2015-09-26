@@ -1,7 +1,7 @@
 # Makefile
 CC = g++
 CFLAGS = -g -Wall -std=c++0x -lpthread
-PROGS = write_pages read_pages read_master_record read_logs read_fio init init_fio
+PROGS = write_pages read_pages read_master_record read_logs read_fio init init_fio load_schema
 
 
 .SUFFIXES: .cpp .o
@@ -45,6 +45,8 @@ init: init.cpp
 init_fio: init.cpp
 	$(CC) $(CFLAGS) -DFIO -o init_fio.exe init.cpp
 
+load_schema: load_schema.cc ../schema.cpp
+	$(CC) $(CFLAGS) -o load_schema.exe $^
 
 # clean
 clean:
