@@ -65,19 +65,19 @@ void init(){
     perror("open");
     exit(1);
   }
-  cout << log_path << endl;
-  int log_num = 1;
+
+  int segment_num = 1;
 #endif
 #ifdef FIO
   if( (fd = open(log_path, O_WRONLY)) == -1 ){
     perror("open");
     exit(1);
   }
-  int log_num = 32;
+  int segment_num = 32;
 #endif
 
     uint64_t base = 0;
-    for(int i=0;i<log_num;i++,base += LOG_OFFSET){
+    for(int i=0;i<segment_num;i++,base += LOG_OFFSET){
 #ifdef FIO
     printf("###   LogFile #%d is cleared   ###\n",i);
 #endif
@@ -91,8 +91,8 @@ void init(){
 	exit(1);
       }
     lsh->chunk_num = 0;
-    lsh->log_num = 0;
-    lsh->segment_size = 0;
+    lsh->log_record_num = 0;
+    lsh->segment_size = sizeof(LogSegmentHeader);
     if(-1 == write(fd, lsh, sizeof(LogSegmentHeader))){
       perror("write");
       exit(1);

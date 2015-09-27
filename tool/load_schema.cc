@@ -19,6 +19,9 @@ main(){
   //  printSchema("customer");
   printSchema("simple");
 
+  //  TSchema* simple_schema;
+  //  simple_schema = MasterSchema::getTableSchemaPtr("simple");
+
   //  loadTable("test");
 
   for(int i=0;i<10;i++)

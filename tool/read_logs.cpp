@@ -80,12 +80,13 @@ PosixMemAlignReadOrDie(int fd, char **chunk_buf_dst, uint64_t read_size){
 void
 DisplayFieldLog(FieldLogHeader *flh, char *field_log_body){
   char *before[kMaxFieldLength], *after[kMaxFieldLength];
+  field_log_body += sizeof(FieldLogHeader);
 
   memcpy(before, field_log_body, flh->fieldLength);
   memcpy(after , field_log_body + flh->fieldLength, flh->fieldLength);
 
   cout << "offset: " << flh->fieldOffset << ", length: " << flh->fieldLength <<
-    ", before: "  << *(int *)before << ", after: "  << *(int *)after;
+    ", before: "  << *(int *)before << ", after: "  << *(int *)after << endl;
 }
 
 void
@@ -93,35 +94,37 @@ DisplayLogRecordHeader(LogRecordHeader *log){
   cout << "Log[" << log->lsn << ":" << log->offset << "]: TransID=" << log->trans_id << ", file_id=" << log->file_id << ", Type=" << log->type;
 
   if(log->type != BEGIN && log->type != END)
-    cout << ", table_id=" << log->table_id <<", prev_lsn=" << log->prev_lsn << ", prev_offset=" << log->prev_offset << ", undo_nxt_lsn=" << log->undo_nxt_lsn << ", undo_nxt_offset=" << log->undo_nxt_offset << ", page_id=" << log->page_id;
+    cout << ", table_id=" << log->table_id <<", prev_lsn=" << log->prev_lsn << ", prev_offset=" << log->prev_offset << ", undo_nxt_lsn=" << log->undo_nxt_lsn << ", undo_nxt_offset=" << log->undo_nxt_offset << ", page_id=" << log->page_id << ", field_num=" << log->field_num;
   //<< ", before=" << log->before << ", after=" << log->after << ", op.op_type=" << log->op.op_type << ", op.amount=" << log-op.amount;
-
   cout << endl;
 }
 
 void
-DisplayLogRecord(LogRecordHeader *lrh, Log *log){
-  uint64_t ptr_on_log_record = 0 + sizeof(LogRecordHeader);
-  FieldLogHeader field_log_header;
-
+DisplayLogRecord(LogRecordHeader *lrh, char *log_record_body){
+  uint64_t ptr_on_log_record = sizeof(LogRecordHeader);
   DisplayLogRecordHeader(lrh);
+
+  FieldLogHeader field_log_header;
   for(uint32_t i=0; i < lrh->field_num; i++){
-    char *field_log_body = (char *)log + ptr_on_log_record;
-    memcpy(&field_log_header, log + ptr_on_log_record, sizeof(FieldLogHeader));
-    DisplayFieldLog(&field_log_header, field_log_body);
+
+    // field_log_headerの値の読み込みがおかしい
+    memcpy(&field_log_header, log_record_body + ptr_on_log_record, sizeof(FieldLogHeader));
+    DisplayFieldLog(&field_log_header, log_record_body + ptr_on_log_record);
+
+    ptr_on_log_record += (sizeof(FieldLogHeader) + field_log_header.fieldLength * 2);
   }
 }
 
 void
 DisplayChunk(ChunkLogHeader *clh, char *chunk_buffer){
-  uint64_t ptr_on_chunk = 0 + sizeof(ChunkLogHeader);
+  uint64_t ptr_on_chunk = sizeof(ChunkLogHeader);
   cout << "chunk_size: " << clh->chunk_size << ", log_record_num: " <<
     clh->log_record_num << endl;
 
   LogRecordHeader lrh;
-  for(uint32_t i; i < clh->log_record_num; i++){
+  for(uint32_t i=0; i < clh->log_record_num; i++){
     memcpy(&lrh, chunk_buffer+ptr_on_chunk, sizeof(LogRecordHeader));
-    DisplayLogRecord(&lrh, (Log *)chunk_buffer+ptr_on_chunk);
+    DisplayLogRecord(&lrh, chunk_buffer+ptr_on_chunk);
     ptr_on_chunk += lrh.total_length;
   }
 }
@@ -129,7 +132,7 @@ DisplayChunk(ChunkLogHeader *clh, char *chunk_buffer){
 void
 DisplayLogs(){
   int fd;
-  uint32_t total_log_num=0;
+  uint32_t total_log_record_num=0;
 
   if( (fd = open(log_path,  O_RDONLY)) == -1){
     perror("open");
@@ -148,8 +151,11 @@ DisplayLogs(){
     PosixMemAlignReadOrDie(fd, (char **)&lsh, sizeof(LogSegmentHeader));
     if(lsh->chunk_num == 0) continue;
 
-    cout << "the number of log is " << lsh->log_num << "" << endl;
-    total_log_num += lsh->log_num;
+    cout << "the number of log is " << lsh->log_record_num << "" << endl;
+    cout << "the number of chunk is " << lsh->chunk_num << "" << endl;
+    cout << "the segment size is " << lsh->segment_size << "" << endl;
+    cout << endl;
+    total_log_record_num += lsh->log_record_num;
 
     for(uint32_t i=0; i < lsh->chunk_num; i++){
       char *chunk_buffer = NULL;
@@ -166,6 +172,7 @@ DisplayLogs(){
       }
 
       DisplayChunk(&clh, chunk_buffer);
+      free(chunk_buffer);
     }
   }
 

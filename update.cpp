@@ -26,14 +26,14 @@ extern char *ARIES_HOME;
 extern void page_fix(int page_id, int th_id);
 
 void WAL_update(OP op, uint32_t xid, int page_id, int th_id);
+void update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_id, uint32_t xid, uint32_t thId);
 void begin_checkpoint();
 void begin(uint32_t xid, int th_id);
 void end(uint32_t xid, int th_id);
 void rollback(uint32_t xid, int th_id);
 
 
-
-std::istream& 
+std::istream&
 operator>>( std::istream& is, UP_OPTYPE& i )
 {
   int tmp ;
@@ -47,7 +47,7 @@ operation_select(OP *op){
     int tmp = rand() % 3 + 1;
     switch(tmp){
     case 1: op->op_type = INC; break;
-    case 2: op->op_type = DEC; break; 
+    case 2: op->op_type = DEC; break;
     case 3: op->op_type = SUBST; break;
     default : op->op_type = INC; break;
     }
@@ -76,7 +76,7 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
   int read_value;
 
 #ifndef READ_MODE
-  begin(xid, th_id);  // begin log write  
+  begin(xid, th_id);  // begin log write
 #endif
   for(int i=0;i<update_num;i++){
     op = ops[i];
@@ -84,13 +84,13 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
 
     BufferControlBlock *pbuf = &(page_table[page_id]);
 
-    /* 
+    /*
        自スレッドが該当ページのロックを取得していないなら、グローバルロックテーブルにロックをかけて、
        他に該当ページを更新するスレッドが先にいないかをチェックする。
      */
-    if(my_lock_table.find(page_id) == my_lock_table.end()){ 
+    if(my_lock_table.find(page_id) == my_lock_table.end()){
       /* 自スレッドが該当ページのロックをまだ獲得していない状態 */
-      
+
       // 開始時間の計測
       struct timeval s,t;
       gettimeofday(&s,NULL);
@@ -105,7 +105,7 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
 	  開始時からの経過時間の計測.
 	  δ以上経過してたら、打ち切ってロールバックする.
 	*/
-	gettimeofday(&t,NULL);	
+	gettimeofday(&t,NULL);
 	/* May be, deadlock occur. */
 	if( ((t.tv_sec - s.tv_sec)*1000 + (t.tv_usec - s.tv_usec)/1000 ) > Delta ){
 	  cout << "-" ;
@@ -113,24 +113,38 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
 
 	  lock_release(my_lock_table);
 	  return -1;
-	} 
+	}
 	else{
 	  //	  cout << "wait:" << xid << endl;
 	}
       }
-      
+
       //lockが完了したら、ロックテーブルに追加
       my_lock_table.insert(page_id);
     }
-    else{ 
+    else{
       ; //既に該当ページのロックを獲得している場合は何もしない
     }
-    
+
     if(op.op_type == READ){
       read_value = page_table[page_id].page.value;
       read_value++; // * this is just codes for avoiding warning
     } else {
-      WAL_update(op, xid, page_id, th_id);
+      //      WAL_update(op, xid, page_id, th_id);
+      char fname[10] = "val";
+      int  flen      = strlen(fname) + 1;
+      int update_field_num = 1;
+
+      std::unique_ptr<int> before_ptr(new int(page_table[page_id].page.value));
+      std::unique_ptr<int> after_ptr(new int(rand()%100));
+      std::unique_ptr<char[]> field_name_ptr(new char[flen]);
+
+      QueryArg q;
+      q.before = (char *)before_ptr.get();
+      q.after = (char *)after_ptr.get();
+      q.field_name = field_name_ptr.get();
+      memcpy(q.field_name, fname, flen);
+      update("simple", &q, update_field_num, page_id, xid , th_id);
     }
   }
 #ifndef READ_MODE
@@ -195,12 +209,14 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
   //  cout << "page[" << p.page_id << "]: page_LSN=" << p.page_LSN << ", value=" <<  p.value << endl;  
 }
 
-void 
+void
 begin(uint32_t xid, int th_id=0){
   Log log;
   memset(&log,0,sizeof(log));
   log.trans_id = xid;
   log.type = BEGIN;
+  log.total_field_length=0;
+  log.total_length=sizeof(Log);
 
   Logger::log_write(&log, NULL, th_id);
 
@@ -226,6 +242,8 @@ end(uint32_t xid, int th_id=0){
   log.prev_offset = dist_trans_table[th_id].LastOffset;
   log.undo_nxt_lsn = 0; /* 一度 END ログが書かれたトランザクションは undo されることはない */
   log.undo_nxt_offset = 0;
+  log.total_field_length=0;
+  log.total_length=sizeof(Log);
 
   Logger::log_write(&log, NULL, th_id);
 
@@ -240,11 +258,16 @@ end(uint32_t xid, int th_id=0){
 void
 update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_id, uint32_t xid, uint32_t thId){
   Log log;
+
+
   FieldLogList *p;
   TSchema *tableSchema = MasterSchema::getTableSchemaPtr(table_name);
 
-  //  lock()を取りたい．
+  if(tableSchema->pageSize == 0){ cout << "the table is not defined: " << table_name << endl; exit(1);}
 
+  //  lock()を取りたい． <- 不明(2015/09/28)
+
+  memset(&log,0,sizeof(log));
   //   LSNはログを書き込む直前に決定する
   log.trans_id = xid;
   log.type = UPDATE;
@@ -265,20 +288,24 @@ update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_
   } catch(std::bad_alloc e){
     PERR("new");
   }
+
   for(int i=0;i < update_field_num;i++, q = q->nxt){
     if(i > 0){
       p[i-1].nxt = &p[i];
     }
 
     FInfo finfo = tableSchema->getFieldInfo(q->field_name);
-    p[i].fieldOffset = finfo.offset;
-    p[i].fieldLength = finfo.length;
+    p[i].field_offset = finfo.offset;
+    p[i].field_length = finfo.length;
     p[i].before = q->before;
-    p[i].before = q->after;
+    p[i].after = q->after;
     p[i].nxt = NULL;
 
     total_field_length += sizeof(size_t)*2 + finfo.length*2;
   }
+
+  // total_field_lengthが入っていない可能性がある?
+
   log.total_field_length = total_field_length;
   log.total_length = total_field_length + sizeof(LogRecordHeader);
 

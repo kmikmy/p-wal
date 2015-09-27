@@ -22,7 +22,7 @@ typedef struct {
 
 typedef struct{
   uint64_t chunk_num;
-  uint64_t log_num;
+  uint64_t log_record_num;
   off_t segment_size; // File size
   char padding[488];
 } LogSegmentHeader; /* 512 Bytes */
@@ -33,7 +33,6 @@ typedef struct{
 } ChunkLogHeader; /* 512 Bytes */
 
 typedef struct{
-  size_t total_length, total_field_length;
   uint64_t lsn, offset, prev_lsn, prev_offset, undo_nxt_lsn, undo_nxt_offset;
   uint64_t trans_id, page_id;
   int file_id;
@@ -41,6 +40,7 @@ typedef struct{
   kTableType table_id;
   char table_name[kMaxTableNameLen];
   size_t field_num; // The number of field in the Log
+  size_t total_length, total_field_length;
 
   // この後に(FieldLog, before value, after value)がN個続く
   // {
@@ -60,7 +60,7 @@ typedef struct {
 /* Logger::log_write()に渡す型 */
 typedef struct _FieldLogList {
  public:
-  size_t fieldOffset, fieldLength;
+  size_t field_offset, field_length;
   char *before, *after;
   _FieldLogList *nxt;
 } FieldLogList;

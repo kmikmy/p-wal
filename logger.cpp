@@ -42,20 +42,30 @@ class LogBuffer{
   int buffer_id_; // this flag's value is 0 or 1.
 
  public:
+  ChunkLogHeader chunk_log_header[2];
+
+  // O_DIRECTで読み書きするのでポインタで取得する
+  // next_offsetの計算で読み込むため、ダブルバッファ用に二つ用意しなければならない
   LogSegmentHeader *log_segment_header[2];
   char *log_buffer_body[2];
+
   std::mutex mtx_for_insert;
   std::mutex mtx_for_write;
   unsigned num_commit;
 
   LogBuffer(){
     log_fd = open(Logger::logpath, O_CREAT | O_RDWR | O_DIRECT, 0666);
+    if(log_fd == -1){
+      cout << "log file open error" << endl;
+      perror("open");
+      exit(1);
+    }
   }
 
   void
   clear_log(int buffer_id){
     memset(log_buffer_body[buffer_id], 0, MAX_CHUNK_LOG_SIZE);
-    ptr_on_chunk_=sizeof(size_t); // 先頭からsizeof(size_t)バイトは、chunkSizeを書き込む
+    ptr_on_chunk_=sizeof(ChunkLogHeader);
     num_commit=0;
   }
 
@@ -71,7 +81,6 @@ class LogBuffer{
     th_id = _th_id;
     buffer_id_ = 0;
     segment_base_addr = (off_t)th_id * LOG_OFFSET;
-    lseek(log_fd, segment_base_addr, SEEK_SET);
 
     /* ダブルバッファリング用にチャンクログ領域とログファイルヘッダを二つ所持している */
     for(int i=0;i<2;i++){
@@ -85,17 +94,21 @@ class LogBuffer{
 	exit(1);
       }
     }
-    
-    /* 初めに使うチャンクログ領域とログファイルヘッダを初期化する */
+
+
+
+    /* 初めに使うチャンクログ領域を初期化する */
     clear_log(0);
+
+    lseek(log_fd, segment_base_addr, SEEK_SET);
     int ret = read(log_fd, log_segment_header[0], sizeof(LogSegmentHeader));
     if(-1 == ret){
-	cout << "log file open error" << endl;
-      perror("read"); exit(1);
+	cout << "log file read error" << endl;
+	perror("read"); exit(1);
     }
   }
 
-  /* 
+  /*
      double buffering と chunksizeのアラインメントの操作を含む。
      この関数はinsertロックを保持した状態で呼ばれ。
      この関数内部でinsertロックを開放する。
@@ -103,8 +116,7 @@ class LogBuffer{
    */
   void
   flush(){
-    int buffer_id_ = getDoubleBufferFlag();
-    size_t _chunk_size = getChunkSize();
+    int buffer_id = getDoubleBufferFlag();
 
     /* チャンクを切り替え */
     toggle_chunk();
@@ -113,41 +125,58 @@ class LogBuffer{
     mtx_for_insert.unlock();
     /* この時点で、切り替わったチャンクにログを挿入可能 */
 
-    nolock_flush(buffer_id_, _chunk_size);
+    nolock_flush(buffer_id);
     mtx_for_write.unlock();
   }
 
   void
+  updateSegmentAndChunkHeader(){
+    int id = getDoubleBufferFlag();
+    uint64_t csize = getChunkSize();
+
+    chunk_log_header[id].chunk_size = csize;
+
+    log_segment_header[id]->segment_size += csize;
+    log_segment_header[id]->chunk_num++;
+    log_segment_header[id]->log_record_num += chunk_log_header[id].log_record_num;
+  }
+
+  void
   toggle_chunk(){
+    updateSegmentAndChunkHeader();
     toggle_buffer();
-    log_segment_header[buffer_id_] = log_segment_header[!buffer_id_];
+    memcpy(log_segment_header[buffer_id_], log_segment_header[!buffer_id_], sizeof(LogSegmentHeader));
+    chunk_log_header[buffer_id_].chunk_size = 0;
+    chunk_log_header[buffer_id_].log_record_num = 0;
     clear_log(buffer_id_);
   }
 
   /*
-    logHeaderはsegment_base_addrに位置し、Logがその後に続く
+    LogSegmentHeaderはsegment_base_addrに位置し、複数のChunkLogがその後に続く
    */
   void
-  nolock_flush(int _select_buffer, size_t _chunk_size)
+  nolock_flush(int _select_buffer)
   {
-    uint64_t file_size_before = log_segment_header[_select_buffer]->fileSize;
-    log_segment_header[_select_buffer]->fileSize += _chunk_size;
+    int id = _select_buffer;
+    uint64_t csize = getChunkSize();
+    uint64_t chunk_head_pos = log_segment_header[id]->segment_size - csize;
 
-    /* チャンクサイズをチャンクの先頭に記録 */
-    memcpy(log_buffer_body, &_chunk_size, sizeof(_chunk_size));
 
+    /* チャンクの先頭にヘッダを記録 */
+    memcpy( log_buffer_body[id], &chunk_log_header[id], sizeof(ChunkLogHeader));
 
     /* チャンクログの書き込み開始地点にlseek */
-    off_t write_pos = segment_base_addr + file_size_before;
+    off_t write_pos = segment_base_addr + chunk_head_pos;
+
     lseek(log_fd, write_pos, SEEK_SET);
 
-    if(-1 == write(log_fd, log_buffer_body[_select_buffer], _chunk_size)){
+    if( -1 == write( log_fd, log_buffer_body[id], csize)){
       perror("write(ChunkLog)"); exit(1);
     }
 
     /* ログセグメントの先頭(ログセグメントヘッダの買い込み開始地点)にlseek */
     lseek(log_fd, segment_base_addr, SEEK_SET);
-    if(-1 == write(log_fd, log_segment_header[_select_buffer], sizeof(LogSegmentHeader))){
+    if(-1 == write(log_fd, log_segment_header[id], sizeof(LogSegmentHeader))){
       perror("write(LogSegmentHeader)"); exit(1);
     }
     fsync(log_fd);
@@ -160,9 +189,10 @@ class LogBuffer{
 
   void
   toggle_buffer(){
-    buffer_id_ = buffer_id_?0:1; 
+    buffer_id_ = buffer_id_? 0 : 1;
   }
 
+  // パディングを含めたチャンクのサイズ
   size_t
   getChunkSize(){
     size_t _chunk_size = getPtrOnChunk();
@@ -172,6 +202,7 @@ class LogBuffer{
     return _chunk_size;
   }
 
+  // パディングを含めない現在のチャンクの実サイズ
   size_t
   getPtrOnChunk(){
     return ptr_on_chunk_;
@@ -184,33 +215,39 @@ class LogBuffer{
 
   bool
   empty(){
-    return ptr_on_chunk_ == sizeof(size_t);
+    return ptr_on_chunk_ == sizeof(ChunkLogHeader);
   }
 
   void
   push(Log *log, FieldLogList *field_log_list){
     FieldLogList *p;
+    int id = getDoubleBufferFlag();
+    int ptr = getPtrOnChunk();
 
-    if(getPtrOnChunk() + log->total_length >= MAX_CHUNK_LOG_SIZE){
+    if(ptr + log->total_length >= MAX_CHUNK_LOG_SIZE){
       perror("can't push");
       exit(1);
     }
-    memcpy(&log_buffer_body[buffer_id_][ptr_on_chunk_], log, sizeof(Log));
-    ptr_on_chunk_ += sizeof(Log);
+    memcpy(&log_buffer_body[id][ptr], log, sizeof(Log));
+    ptr += sizeof(Log);
 
     for(p = field_log_list; p != NULL; p = p->nxt){ // fieldLogListが最初からNULLの場合は何もしない
-      memcpy(&log_buffer_body[buffer_id_][ptr_on_chunk_], p, sizeof(size_t)*2); // fieldOffsetとfieldLengthのcopy
-      ptr_on_chunk_ += sizeof(size_t)*2;
-      memcpy(&log_buffer_body[buffer_id_][ptr_on_chunk_], p->before, p->fieldLength);
-      ptr_on_chunk_ += p->fieldLength;
-      memcpy(&log_buffer_body[buffer_id_][ptr_on_chunk_], p->after, p->fieldLength);
-      ptr_on_chunk_ += p->fieldLength;
+      memcpy(&log_buffer_body[id][ptr], p, sizeof(FieldLogHeader)); // 更新フィールドのオフセットと長さ
+      ptr += sizeof(FieldLogHeader);
+      memcpy(&log_buffer_body[id][ptr], p->before, p->field_length);
+      ptr += p->field_length;
+      memcpy(&log_buffer_body[id][ptr], p->after, p->field_length);
+      ptr += p->field_length;
     }
+
+    ptr_on_chunk_ = ptr;
 
     if(log->type == END)
       num_commit++;
 
-    //    std::cout << "ptr_on_chunk_: " << ptr_on_chunk_ << std::endl;
+    chunk_log_header[id].log_record_num++;
+
+    //    std::cout << "ptr: " << ptr_on_chunk_ << std::endl;
   }
 
   LSN_and_Offset
@@ -226,14 +263,14 @@ class LogBuffer{
     /* この時点で既にインサートロックを獲得している */
     _ret.first = _pos; // Normal WALではLSNとoffsetは等しい
     ARIES_SYSTEM::master_record.system_last_lsn = _pos; // システムのGlobalLSNの更新
-#endif    
+#endif
 
     return _ret;
   }
-  
+
   uint64_t
   next_offset(){
-    uint64_t pos = segment_base_addr + log_segment_header[getDoubleBufferFlag()]->fileSize + getPtrOnChunk();
+    uint64_t pos = segment_base_addr + log_segment_header[getDoubleBufferFlag()]->segment_size + getPtrOnChunk();
     return pos;
   }
 };
@@ -294,10 +331,10 @@ Logger::log_write(Log *log, FieldLogList *field_log_list, int th_id){
   while(try_push){
     if(logBuffer[th_id].ableToAdd(log->total_length)){
       logBuffer[th_id].push(log, field_log_list);
+      try_push = false;
     } else {
       logBuffer[th_id].flush(); // flush()の中でinsertロックを開放している
       logBuffer[th_id].mtx_for_insert.lock(); // 再度insertロックの獲得を試みる
-      try_push = false;
     }
   }
 

@@ -1,4 +1,5 @@
 #include "include/ARIES.h"
+#include "include/schema.h"
 #include <mutex>
 #include <cstdlib>
 #include <sys/types.h>
@@ -85,6 +86,8 @@ ARIES_SYSTEM::db_init(int th_num){
   // tpc-c
   //  tpcc_init();
   //  tpcc_load();
+
+  loadAllSchema();
 }
 
 uint32_t ARIES_SYSTEM::xid_inc(){
