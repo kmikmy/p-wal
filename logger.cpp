@@ -118,10 +118,11 @@ class LogBuffer{
   flush(){
     int buffer_id = getDoubleBufferFlag();
 
+    mtx_for_write.lock();
+
     /* チャンクを切り替え */
     toggle_chunk();
 
-    mtx_for_write.lock();
     mtx_for_insert.unlock();
     /* この時点で、切り替わったチャンクにログを挿入可能 */
 
@@ -158,8 +159,7 @@ class LogBuffer{
   nolock_flush(int _select_buffer)
   {
     int id = _select_buffer;
-    uint64_t csize = getChunkSize();
-    uint64_t chunk_head_pos = log_segment_header[id]->segment_size - csize;
+    uint64_t chunk_head_pos = log_segment_header[id]->segment_size - chunk_log_header[id].chunk_size;
 
 
     /* チャンクの先頭にヘッダを記録 */
@@ -170,7 +170,7 @@ class LogBuffer{
 
     lseek(log_fd, write_pos, SEEK_SET);
 
-    if( -1 == write( log_fd, log_buffer_body[id], csize)){
+    if( -1 == write( log_fd, log_buffer_body[id], chunk_log_header[id].chunk_size)){
       perror("write(ChunkLog)"); exit(1);
     }
 
@@ -317,10 +317,11 @@ int
 Logger::log_write(Log *log, FieldLogList *field_log_list, int th_id){
   LSN_and_Offset lsn_and_offset;
   bool try_push = true;
-
 #ifndef FIO
   th_id = 0;
 #endif
+
+
   logBuffer[th_id].mtx_for_insert.lock();
 
   lsn_and_offset = logBuffer[th_id].next_lsn_and_offset();

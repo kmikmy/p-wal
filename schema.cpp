@@ -103,8 +103,6 @@ loadAllSchema(){
   cmd += ARIES_HOME;
   cmd += SCHEMA_DIR_NAME;
 
-  cout << cmd.c_str() << endl;
-
   if( (fp = popen(cmd.c_str(), "r")) == NULL ){
     PERR("popen");
   }

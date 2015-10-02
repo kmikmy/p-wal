@@ -95,11 +95,12 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
       struct timeval s,t;
       gettimeofday(&s,NULL);
       while(1){
-
 	if(op.op_type == READ){
-	  if(pthread_rwlock_tryrdlock(&pbuf->lock) == 0) break; // 読み込みロックの獲得に成功したらbreakする。
+	  if(pthread_rwlock_tryrdlock(&pbuf->lock) == 0)
+	    break; // 読み込みロックの獲得に成功したらbreakする。
 	} else {
-	  if(pthread_rwlock_trywrlock(&pbuf->lock) == 0) break; // 書き込みロックの獲得に成功したらbreakする。
+	  if(pthread_rwlock_trywrlock(&pbuf->lock) == 0) 
+	    break; // 書き込みロックの獲得に成功したらbreakする。
 	}
 	/*
 	  開始時からの経過時間の計測.
