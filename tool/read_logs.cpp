@@ -166,6 +166,7 @@ DisplayLogs(){
       memcpy(&clh, chunk_buffer, sizeof(ChunkLogHeader));
 
       if(clh.chunk_size != kFirstReadChunkSize){
+	lseek(fd, -kFirstReadChunkSize, SEEK_CUR);
 	free(chunk_buffer);
 	PosixMemAlignReadOrDie(fd, &chunk_buffer, clh.chunk_size);
       }
