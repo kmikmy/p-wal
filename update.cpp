@@ -23,11 +23,10 @@ extern DistributedTransTable *dist_trans_table;
 extern BufferControlBlock page_table[PAGE_N];
 extern char *ARIES_HOME;
 
-extern void page_fix(int page_id, int th_id);
+extern void pageFix(int page_id, int th_id);
 
-void WAL_update(OP op, uint32_t xid, int page_id, int th_id);
+void WALUpdate(OP op, uint32_t xid, int page_id, int th_id);
 void update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_id, uint32_t xid, uint32_t thId);
-void begin_checkpoint();
 void begin(uint32_t xid, int th_id);
 void end(uint32_t xid, int th_id);
 void rollback(uint32_t xid, int th_id);
@@ -43,7 +42,8 @@ operator>>( std::istream& is, UP_OPTYPE& i )
 }
 
 void
-operation_select(OP *op){
+operationSelect(OP *op)
+{
     int tmp = rand() % 3 + 1;
     switch(tmp){
     case 1: op->op_type = INC; break;
@@ -55,13 +55,15 @@ operation_select(OP *op){
 }
 
 void
-page_select(uint32_t *page_id){
+pageSelect(uint32_t *page_id)
+{
   *page_id = (uint32_t)PAGE_N*((double)rand()/((double)RAND_MAX+1.0));
 
 }
 
 static void
-lock_release(set<uint32_t> &lock_table){
+lockRelease(set<uint32_t> &lock_table)
+{
   for(set<uint32_t>::iterator it = lock_table.begin(); it!=lock_table.end(); it++){
     pthread_rwlock_unlock(&page_table[*it].lock);
   }
@@ -69,7 +71,8 @@ lock_release(set<uint32_t> &lock_table){
 
 
 int
-update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int th_id){
+updateOperations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int th_id)
+{
   set<uint32_t> my_lock_table;
   OP op;
   uint32_t page_id;
@@ -112,7 +115,7 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
 	  cout << "-" ;
 	  rollback(xid, th_id);
 
-	  lock_release(my_lock_table);
+	  lockRelease(my_lock_table);
 	  return -1;
 	}
 	else{
@@ -151,12 +154,13 @@ update_operations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int
 #ifndef READ_MODE
   end(xid, th_id); // end log write
 #endif
-  lock_release(my_lock_table);
+  lockRelease(my_lock_table);
 
   return 0;
 }
 
-void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
+void WALUpdate(OP op, uint32_t xid, int page_id, int th_id)
+{
   BufferControlBlock *pbuf = &page_table[page_id];
   // fixed flagがなければファイルから読み込んでfixする
 
@@ -164,7 +168,7 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
   debug("fixed_count: " << pbuf->fixed_count << endl);
 #endif
 
-  page_fix(page_id, th_id); // pageがBCBにfixされていなかったらfix。既にfixされている場合はfixed_countを+1する。
+  pageFix(page_id, th_id); // pageがBCBにfixされていなかったらfix。既にfixされている場合はfixed_countを+1する。
 
   Log log;
   //   LSNはログを書き込む直前に決定する
@@ -188,7 +192,7 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
 
   //  ARIES_SYSTEM::transtable_debug();
 
-  Logger::log_write(&log, NULL, th_id);
+  Logger::logWrite(&log, NULL, th_id);
   pbuf->page.page_LSN = log.lsn;
 
 
@@ -211,7 +215,8 @@ void WAL_update(OP op, uint32_t xid, int page_id, int th_id){
 }
 
 void
-begin(uint32_t xid, int th_id=0){
+begin(uint32_t xid, int th_id=0)
+{
   Log log;
   memset(&log,0,sizeof(log));
   log.trans_id = xid;
@@ -219,7 +224,7 @@ begin(uint32_t xid, int th_id=0){
   log.total_field_length=0;
   log.total_length=sizeof(Log);
 
-  Logger::log_write(&log, NULL, th_id);
+  Logger::logWrite(&log, NULL, th_id);
 
   dist_trans_table[th_id].TransID = xid;
   dist_trans_table[th_id].LastLSN = log.lsn;
@@ -234,7 +239,8 @@ begin(uint32_t xid, int th_id=0){
 }
 
 void
-end(uint32_t xid, int th_id=0){
+end(uint32_t xid, int th_id=0)
+{
   Log log;
   memset(&log,0,sizeof(log));
   log.trans_id = xid;
@@ -246,7 +252,7 @@ end(uint32_t xid, int th_id=0){
   log.total_field_length=0;
   log.total_length=sizeof(Log);
 
-  Logger::log_write(&log, NULL, th_id);
+  Logger::logWrite(&log, NULL, th_id);
 
   /* dist_transaction_tableのエントリを削除する. */
   memset(&dist_trans_table[th_id], 0, sizeof(DistributedTransTable));
@@ -257,7 +263,8 @@ end(uint32_t xid, int th_id=0){
 }
 
 void
-update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_id, uint32_t xid, uint32_t thId){
+update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_id, uint32_t xid, uint32_t thId)
+{
   Log log;
 
 
@@ -310,7 +317,7 @@ update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_
   log.total_field_length = total_field_length;
   log.total_length = total_field_length + sizeof(LogRecordHeader);
 
-  Logger::log_write(&log, p, thId);
+  Logger::logWrite(&log, p, thId);
 
   delete[] p;
 }
@@ -325,7 +332,8 @@ update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_
   そのために、一度ログバッファの中身をflushしなければならない（？　#2015/07/09
 */
 void
-rollback(uint32_t xid, int th_id){
+rollback(uint32_t xid, int th_id)
+{
   //  cout << "rollback[" << xid << "]" << std::endl;
 
   int log_fd = open(Logger::logpath, O_RDONLY);
@@ -333,8 +341,8 @@ rollback(uint32_t xid, int th_id){
     perror("open"); exit(1);
   }
 
-  Logger::log_flush(th_id);
-  
+  Logger::logFlush(th_id);
+
   uint64_t log_offset = dist_trans_table[th_id].LastOffset; // rollbackするトランザクションの最後のLSN
 
   Log log;
@@ -433,7 +441,6 @@ rollback(uint32_t xid, int th_id){
 	}
       }
 
-
       Log clog;
       memset(&clog,0,sizeof(Log));
       clog.type = COMPENSATION;
@@ -452,7 +459,7 @@ rollback(uint32_t xid, int th_id){
 
       // compensation log recordをどこに書くかという問題はひとまず置いておく
       // とりあえず全部id=0のログブロックに書く
-      ret = Logger::log_write(&clog, NULL, 0);
+      ret = Logger::logWrite(&clog, NULL, 0);
 
 #ifdef DEBUG
       Logger::log_debug(clog);
@@ -479,7 +486,7 @@ rollback(uint32_t xid, int th_id){
       end_log.undo_nxt_lsn = 0;
       end_log.undo_nxt_offset = 0;
 
-      Logger::log_write(&end_log, NULL, 0);
+      Logger::logWrite(&end_log, NULL, 0);
 #ifdef DEBUG
       Logger::log_debug(end_log);
 #endif

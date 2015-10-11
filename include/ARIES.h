@@ -74,14 +74,14 @@ private:
 public: 
   static MasterRecord master_record;
 
-  static void db_init(int th_num);
-  static uint32_t xid_inc();
-  static uint32_t xid_read();
+  static void dbInit(int th_num);
+  static uint32_t xidInc();
+  static uint32_t xidRead();
 
-  static int normal_exit();
-  static int abnormal_exit();
+  static int normalExit();
+  static int abnormalExit();
 
-  static void transtable_debug();
+  static void transtableDebug();
   
 };
 #endif //  _ARIES

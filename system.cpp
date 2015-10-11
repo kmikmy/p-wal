@@ -30,20 +30,20 @@ static std::mutex mr_mtx;
 static int system_fd;
 
 extern void recovery();
-extern void pbuf_init();
+extern void pbufInit();
 
 extern void tpcc_init();
 extern void tpcc_load();
 
 
 static void
-create_dist_trans_table(int th_num)
+createDistTransTable(int th_num)
 {
   dist_trans_table = (DistributedTransTable *)calloc(th_num, sizeof(DistributedTransTable));
 }
 
 static void
-load_master_record(){
+loadMasterRecord(){
   std::string mr_filename = ARIES_HOME;
   mr_filename += "/data/system.dat";
 
@@ -51,12 +51,12 @@ load_master_record(){
     perror("open");
     exit(1);
   }
-  
+
   if( read(system_fd, &ARIES_SYSTEM::master_record, sizeof(MasterRecord)) == -1 ){
     perror("read");
     exit(1);
   }
-  
+
   if(ARIES_SYSTEM::master_record.last_exit == false ) {
     cout << "[recovery start]" << endl;
 //    recovery_trans_table.clear();
@@ -73,16 +73,17 @@ load_master_record(){
   srand(time(NULL));
 }
 
-void 
-ARIES_SYSTEM::db_init(int th_num){
+void
+ARIES_SYSTEM::dbInit(int th_num)
+{
   // loggerの初期化
   Logger::init();
   // マスターレコードの作成
-  load_master_record();
+  loadMasterRecord();
   // 全ページをメモリバッファに読み込んで、ロックオブジェクトを初期化する
-  pbuf_init();
+  pbufInit();
   // 分散トランザクションテーブルの生成
-  create_dist_trans_table(th_num);
+  createDistTransTable(th_num);
   // tpc-c
   //  tpcc_init();
   //  tpcc_load();
@@ -90,29 +91,32 @@ ARIES_SYSTEM::db_init(int th_num){
   loadAllSchema();
 }
 
-uint32_t ARIES_SYSTEM::xid_inc(){
+uint32_t
+ARIES_SYSTEM::xidInc()
+{
   return __sync_fetch_and_add(&master_record.system_xid,1);
 }
 
-uint32_t ARIES_SYSTEM::xid_read(){
+uint32_t
+ARIES_SYSTEM::xidRead()
+{
   return master_record.system_xid;
 }
 
-int ARIES_SYSTEM::abnormal_exit(){
+int
+ARIES_SYSTEM::abnormalExit()
+{
   // master recordを書かない & トランザクションスレッドの終了を待機しない
-
   return 1;
 }
 
 
 int
-ARIES_SYSTEM::normal_exit()
+ARIES_SYSTEM::normalExit()
 {
-
   // この関数に入る前に他スレッドが終了していること
-  
   std::lock_guard<std::mutex> lock(mr_mtx);
-  Logger::log_all_flush();
+  Logger::logAllFlush();
 
   master_record.last_exit=true;
 
@@ -130,14 +134,14 @@ ARIES_SYSTEM::normal_exit()
   }
   std::ofstream ofs("cas_missed.csv", std::ios::out | std::ios::app);
   ofs << total_cas_miss << ",";
-  
+
   pid_t pid;
   char buf[128];
   pid = getpid();
 
   snprintf(buf, sizeof(buf), "cat /proc/%d/status | grep '^voluntary_ctxt_switches' | awk '{print $2}' | tr '\n' ',' >> voluntary_ctxt_switches.csv", pid);
   system(buf);
-  
+
   snprintf(buf, sizeof(buf), "cat /proc/%d/status | grep nonvoluntary_ctxt_switches | awk '{print $2}' | tr '\n' ',' >> nonvoluntary_ctxt_switches.csv", pid);
   system(buf);
 #endif
@@ -145,7 +149,9 @@ ARIES_SYSTEM::normal_exit()
   return 1;
 }
 
-void ARIES_SYSTEM::transtable_debug(){
+void
+ARIES_SYSTEM::transtableDebug()
+{
   cout << "++++++++++++++++transaction table++++++++++++++++++" << endl;
   TransTable::iterator it;
   // for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end(); it++){

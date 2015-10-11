@@ -75,14 +75,14 @@ class Logger
   static uint32_t num_group_commit;
 
   static const char* logpath;
-  static void set_num_group_commit(int group_param);
-  static int log_write(Log *log, FieldLogList *field_log_list, int th_id);
-  static void log_flush(int th_id);
-  static void log_all_flush();
-  static void log_debug(Log log);
+  static void setNumGroupCommit(int group_param);
+  static int logWrite(Log *log, FieldLogList *field_log_list, int th_id);
+  static void logFlush(int th_id);
+  static void logAllFlush();
+  static void logDebug(Log log);
   static void init();
-  static uint64_t read_LSN();
-  static uint64_t current_offset_logfile_for_id(int th_id);
+  static uint64_t readLSN();
+  static uint64_t currentOffsetLogFile(int th_id);
 };
 
 

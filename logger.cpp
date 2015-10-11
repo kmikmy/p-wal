@@ -53,7 +53,8 @@ class LogBuffer{
   std::mutex mtx_for_write;
   unsigned num_commit;
 
-  LogBuffer(){
+  LogBuffer()
+  {
     log_fd = open(Logger::logpath, O_CREAT | O_RDWR | O_DIRECT, 0666);
     if(log_fd == -1){
       cout << "log file open error" << endl;
@@ -63,7 +64,8 @@ class LogBuffer{
   }
 
   void
-  clear_log(int buffer_id){
+  clearLog(int buffer_id)
+  {
     memset(log_buffer_body[buffer_id], 0, MAX_CHUNK_LOG_SIZE);
     ptr_on_chunk_=sizeof(ChunkLogHeader);
     num_commit=0;
@@ -98,7 +100,7 @@ class LogBuffer{
 
 
     /* 初めに使うチャンクログ領域を初期化する */
-    clear_log(0);
+    clearLog(0);
 
     lseek(log_fd, segment_base_addr, SEEK_SET);
     int ret = read(log_fd, log_segment_header[0], sizeof(LogSegmentHeader));
@@ -121,12 +123,12 @@ class LogBuffer{
     mtx_for_write.lock();
 
     /* チャンクを切り替え */
-    toggle_chunk();
+    toggleChunk();
 
     mtx_for_insert.unlock();
     /* この時点で、切り替わったチャンクにログを挿入可能 */
 
-    nolock_flush(buffer_id);
+    nolockFlush(buffer_id);
     mtx_for_write.unlock();
   }
 
@@ -143,20 +145,21 @@ class LogBuffer{
   }
 
   void
-  toggle_chunk(){
+  toggleChunk()
+  {
     updateSegmentAndChunkHeader();
-    toggle_buffer();
+    toggleBuffer();
     memcpy(log_segment_header[buffer_id_], log_segment_header[!buffer_id_], sizeof(LogSegmentHeader));
     chunk_log_header[buffer_id_].chunk_size = 0;
     chunk_log_header[buffer_id_].log_record_num = 0;
-    clear_log(buffer_id_);
+    clearLog(buffer_id_);
   }
 
   /*
     LogSegmentHeaderはsegment_base_addrに位置し、複数のChunkLogがその後に続く
    */
   void
-  nolock_flush(int _select_buffer)
+  nolockFlush(int _select_buffer)
   {
     int id = _select_buffer;
     uint64_t chunk_head_pos = log_segment_header[id]->segment_size - chunk_log_header[id].chunk_size;
@@ -183,18 +186,21 @@ class LogBuffer{
   }
 
   int
-  getDoubleBufferFlag(){
+  getDoubleBufferFlag()
+  {
     return buffer_id_;
   }
 
   void
-  toggle_buffer(){
+  toggleBuffer()
+  {
     buffer_id_ = buffer_id_? 0 : 1;
   }
 
   // パディングを含めたチャンクのサイズ
   size_t
-  getChunkSize(){
+  getChunkSize()
+  {
     size_t _chunk_size = getPtrOnChunk();
     if(_chunk_size % 512 != 0){
       _chunk_size += (512 - _chunk_size % 512);
@@ -204,22 +210,26 @@ class LogBuffer{
 
   // パディングを含めない現在のチャンクの実サイズ
   size_t
-  getPtrOnChunk(){
+  getPtrOnChunk()
+  {
     return ptr_on_chunk_;
   }
 
   bool
-  ableToAdd(size_t lsize){
+  ableToAdd(size_t lsize)
+  {
     return ptr_on_chunk_ + lsize <=  MAX_CHUNK_LOG_SIZE;
   }
 
   bool
-  empty(){
+  empty()
+  {
     return ptr_on_chunk_ == sizeof(ChunkLogHeader);
   }
 
   void
-  push(Log *log, FieldLogList *field_log_list){
+  push(Log *log, FieldLogList *field_log_list)
+  {
     FieldLogList *p;
     int id = getDoubleBufferFlag();
     int ptr = getPtrOnChunk();
@@ -251,9 +261,10 @@ class LogBuffer{
   }
 
   LSN_and_Offset
-  next_lsn_and_offset(){
+  nextLSNAndOffset()
+  {
     LSN_and_Offset _ret;
-    off_t _pos = next_offset();
+    off_t _pos = nextOffset();
 
     _ret.second = _pos;
 
@@ -269,7 +280,8 @@ class LogBuffer{
   }
 
   uint64_t
-  next_offset(){
+  nextOffset()
+  {
     uint64_t pos = segment_base_addr + log_segment_header[getDoubleBufferFlag()]->segment_size + getPtrOnChunk();
     return pos;
   }
@@ -277,7 +289,9 @@ class LogBuffer{
 
 static LogBuffer logBuffer[MAX_WORKER_THREAD];
 
-std::ostream& operator<<( std::ostream& os, OP_TYPE& opt){
+std::ostream&
+operator<<( std::ostream& os, OP_TYPE& opt)
+{
   switch(opt){
   case NONE: os << "NONE"; break;
   case INC: os << "INC"; break;
@@ -289,7 +303,9 @@ std::ostream& operator<<( std::ostream& os, OP_TYPE& opt){
   return os;
 }
 
-std::ostream& operator<<( std::ostream& os, kLogType& type){
+std::ostream&
+operator<<( std::ostream& os, kLogType& type)
+{
   //  UPDATE, COMPENSATION, PREPARE, END, OSfile_return, BEGIN };
   switch(type){
   case UPDATE: os << "UPDATE"; break;
@@ -307,14 +323,16 @@ std::ostream& operator<<( std::ostream& os, kLogType& type){
 
 /* 各logBufferにth_idを設定して、ヘッダーを読み込む*/
 void
-Logger::init(){
+Logger::init()
+{
   for(int i=0;i<MAX_WORKER_THREAD;i++){
     logBuffer[i].init(i);
   }
 }
 
 int
-Logger::log_write(Log *log, FieldLogList *field_log_list, int th_id){
+Logger::logWrite(Log *log, FieldLogList *field_log_list, int th_id)
+{
   LSN_and_Offset lsn_and_offset;
   bool try_push = true;
 #ifndef FIO
@@ -324,7 +342,7 @@ Logger::log_write(Log *log, FieldLogList *field_log_list, int th_id){
 
   logBuffer[th_id].mtx_for_insert.lock();
 
-  lsn_and_offset = logBuffer[th_id].next_lsn_and_offset();
+  lsn_and_offset = logBuffer[th_id].nextLSNAndOffset();
   log->lsn = lsn_and_offset.first;
   log->offset = lsn_and_offset.second;
   log->file_id = th_id;
@@ -351,7 +369,8 @@ Logger::log_write(Log *log, FieldLogList *field_log_list, int th_id){
 
 /* ログバッファのフラッシュを行う */
 void
-Logger::log_flush(int th_id){
+Logger::logFlush(int th_id)
+{
 #ifndef FIO
   th_id = 0;
 #endif
@@ -361,7 +380,8 @@ Logger::log_flush(int th_id){
 
 /* 全てのログバッファのフラッシュを行う(システム終了時) */
 void
-Logger::log_all_flush(){
+Logger::logAllFlush()
+{
   for(int i=0;i<MAX_WORKER_THREAD;i++){
     if(!logBuffer[i].empty()){
       logBuffer[i].flush();
@@ -370,17 +390,20 @@ Logger::log_all_flush(){
 }
 
 uint64_t
-Logger::read_LSN(){
+Logger::readLSN()
+{
   return ARIES_SYSTEM::master_record.system_last_lsn;
 }
 
 uint64_t
-Logger::current_offset_logfile_for_id(int th_id){
-  return logBuffer[th_id].next_offset();
+Logger::currentOffsetLogFile(int th_id)
+{
+  return logBuffer[th_id].nextOffset();
 }
 
 void
-Logger::log_debug(Log log){
+Logger::logDebug(Log log)
+{
   std::cout << "Log[" << log.lsn;
   std::cout << "," << log.offset ;
   std::cout << "]: trans_id: " << log.trans_id;
@@ -400,7 +423,8 @@ Logger::log_debug(Log log){
 }
 
 void
-Logger::set_num_group_commit(int group_param){
+Logger::setNumGroupCommit(int group_param)
+{
   num_group_commit = group_param;
 }
 
