@@ -1,5 +1,6 @@
-最初はtool/でmakeして出来上がった、init.exeとwrite_pages.exeを実行する.
-その後はルート階層でmakeして出来上がる./aries.exe(HDD)、あるいは./aries_fio.exe(Fusion)を実行する.
+
+tool/でmakeして出来上がった、init.exeとwrite_pages.exeを実行する.
+その後はルート階層でmakeして出来上がる./aries.exe(HDD)、あるいは./aries_fio.exe(ioDrive)を実行する.
 
 data/: システムログやページなどの書き込むデータが集まっている.
 　　　ログはHDDの場合は/work下にあり, Fusionの場合は/dev/fioaに直接書き込まれる.
