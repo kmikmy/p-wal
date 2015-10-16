@@ -1,33 +1,53 @@
+
 # p-wal
 
-## 初期化
 
-(Naive方式)
+## Install
+
+```
+$ cd p-wal
+$ make
+$ cd tool/
+$ make
+$ cd ../
+$ export ARIES_HOME=`pwd`
+```
+
+## Initialization
+
+(Naive)
+
 ```
 $ tool/write_pages.exe
 $ tool/init.exe
 ```
 
-(P-WAL方式)
+(P-WAL)
+
 ```
 $ tool/wwrite_pages.exe
 $ tool/init_fio.exe
 ```
 
 
-## 実行方法
+## Execution
 
-init.exeとwrite_pages.exeを実行する.
-その後はルート階層でmakeして出来上がる./aries.exe(HDD)、あるいは./aries_fio.exe(ioDrive)を実行する.
+```
+./aries num_trans num_threads num_group_commit
+```
 
-## その他
-## data/: システムログやページなどの書き込むデータが集まっている.
--ログはHDDの場合は/work下にあり, ioDriveの場合は/dev/fioaに直接書き込まれる.
--script/: 測定用のスクリプトが入っている
+## data/
 
-## tool/: ツール群を含んでいる。
--init.exe - ../data/system.dat(xidと前回の終了ステータス), /work/kamiya/log.datをクリア
--init_fio.exe - ../data/system.dat(xidと前回の終了ステータス), /dev/fioaのログをクリア
--write_pages.exe - ../data/pages.datにデータを書き込む
--read_pages.exe - ../data/pages.datのデータを読み込む
--read_logs.exe - /work/kamiya/log.datのログを読み込む
+- system.dat: system log
+- page.dat: pages data
+
+## script/
+- benchmark script
+
+## tool/
+- init.exe: clear ../data/system.dat and /work/kamiya/log.dat
+- init_fio.exe: clear ../data/system.dat and /dev/fioa
+- write_pages.exe: write to ../data/pages.dat
+- read_pages.exe: read pages in ../data/pages.dat
+- read_logs.exe: read centralized logs in /work/kamiya/log.dat
+- read_fio.exe: read distributed logs in /dev/fioa
