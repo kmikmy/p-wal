@@ -34,7 +34,7 @@ class FD
 class MyException : std::exception
 {
  public:
-  MyException(const std::string& cause1, const std::string& cause2 = "", const std::string& cause3 = "") throw();
+  MyException(const std::string& cause1, const std::string& cause2 = "", const std::string& cause3 = "") : cause1_(cause1), cause2_(cause2), cause2_(cause2){}
   ~MyException() throw();
 
   void show();

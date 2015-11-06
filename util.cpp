@@ -38,13 +38,6 @@ void FD::close()
   }
 }
 
-MyException::MyException(const std::string& cause1, const std::string& cause2, const std::string& cause3) throw()
-{
-  cause1_ = cause1;
-  cause2_ = cause2;
-  cause3_ = cause3;
-}
-
 MyException::~MyException() throw(){}
 
 void MyException::show()
