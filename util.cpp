@@ -10,10 +10,7 @@
 #include <exception>
 #include <iostream>
 
-FD::FD()
-{
-  fd_ = -1;
-}
+FD::FD(): fd_(-1){}
 
 FD::FD(const std::string& filepath, int o_flag, mode_t mode)
 {
