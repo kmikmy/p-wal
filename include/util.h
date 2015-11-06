@@ -3,8 +3,7 @@
 /// including declaration of FD and MyExeption
 ///
 
-#ifndef _util
-#define _util
+#pragma once
 
 #include <fcntl.h>
 #include <sys/types.h>
@@ -16,9 +15,14 @@
 class FD
 {
  public:
-  FD();
-  FD(const std::string& filepath, int o_flag, mode_t mode = 0644);
-  ~FD();
+
+  FD(): fd_(-1){}
+  FD(const std::string& filepath, int o_flag, mode_t mode = 0644) : fd_(-1){
+	open(filepath, o_flag, mode);
+  }
+  ~FD(){
+	close();
+  }
 
   int fd() const {
 	return fd_;
@@ -28,22 +32,25 @@ class FD
   void write(const void *ptr, size_t size);
   void close();
 
- protected:
+ private:
   int fd_;
+  FD(const FD&);
+  void operator=(const FD&);
 };
 
 class MyException : std::exception
 {
  public:
-  explicit MyException(const std::string& cause1, const std::string& cause2 = "", const std::string& cause3 = "") : cause_(cause1+' '+cause2+' '+cause3){}
+  explicit MyException(const std::string& cause1,
+					   const std::string& cause2 = "",
+					   const std::string& cause3 = "") : cause_(cause1+' '+cause2+' '+cause3){}
+  ~MyException() throw(){}
 
   void show();
-  const char* what() const {
+  const char* what() const throw() {
 	return cause_.c_str();
   }
 
- protected:
+ private:
   std::string cause_;
 };
-
-#endif

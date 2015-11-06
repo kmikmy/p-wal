@@ -4,34 +4,19 @@
 ///
 
 #include "include/util.h"
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <string>
-#include <exception>
-#include <iostream>
-
-FD::FD(): fd_(-1){}
-
-FD::FD(const std::string& filepath, int o_flag, mode_t mode)
-{
-  open(filepath, o_flag, mode);
-}
-
-FD::~FD()
-{
-  close();
-}
 
 void FD::open(const std::string& filepath, int o_flag, mode_t mode)
 {
+  close();
   fd_ = ::open(filepath.c_str(), o_flag, mode);
   if(fd_ == -1){
 	throw MyException("FD", "open");
   }
 }
 
-void FD::write(const void *ptr, size_t size){
-  ssize_t ret = ::write(fd_, ptr, size); // ほんとは全て書いたかをチェックする
+void FD::write(const void *ptr, size_t size)
+{
+  ssize_t ret = ::write(fd_, ptr, size); // ほんとは全て書いたかをチェックする // ほんとはerrnoをチェックしてEINTRならリトライする
   if(ret == -1){
 	throw MyException("FD", "write");
   }
@@ -44,8 +29,6 @@ void FD::close()
 	fd_ = -1;
   }
 }
-
-MyException::~MyException() throw(){}
 
 void MyException::show()
 {
