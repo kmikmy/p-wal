@@ -23,6 +23,7 @@ class FD
   operator int();
 
   void open(const std::string& filepath, int o_flag, mode_t mode = 0644);
+  void close();
 
  protected:
   int fd_;

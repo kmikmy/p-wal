@@ -22,9 +22,7 @@ FD::FD(const std::string& filepath, int o_flag, mode_t mode)
 
 FD::~FD()
 {
-  if(fd_ != -1){
-	close(fd_);
-  }
+  close()
 }
 
 FD::operator int()
@@ -37,6 +35,13 @@ void FD::open(const std::string& filepath, int o_flag, mode_t mode)
   fd_ = ::open(filepath.c_str(), o_flag, mode);
   if(fd_ == -1){
 	throw MyException("FD", "open");
+  }
+}
+
+void FD::close()
+{
+  if(fd_ != -1){
+	::close(fd_);
   }
 }
 
