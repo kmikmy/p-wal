@@ -30,6 +30,13 @@ void FD::open(const std::string& filepath, int o_flag, mode_t mode)
   }
 }
 
+void FD::write(const void *ptr, size_t size){
+  ssize_t ret = ::write(fd_, ptr, size); // ほんとは全て書いたかをチェックする
+  if(ret == -1){
+	throw MyException("FD", "write");
+  }
+}
+
 void FD::close()
 {
   if(fd_ != -1){

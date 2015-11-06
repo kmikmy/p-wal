@@ -25,6 +25,7 @@ class FD
   }
 
   void open(const std::string& filepath, int o_flag, mode_t mode = 0644);
+  void write(const void *ptr, size_t size);
   void close();
 
  protected:
@@ -34,7 +35,7 @@ class FD
 class MyException : std::exception
 {
  public:
-  MyException(const std::string& cause1, const std::string& cause2 = "", const std::string& cause3 = "") : cause1_(cause1), cause2_(cause2), cause2_(cause2){}
+  MyException(const std::string& cause1, const std::string& cause2 = "", const std::string& cause3 = "") : cause1_(cause1), cause2_(cause2), cause3_(cause3){}
   ~MyException() throw();
 
   void show();
