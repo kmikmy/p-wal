@@ -19,7 +19,7 @@ FD::FD(const std::string& filepath, int o_flag, mode_t mode)
 
 FD::~FD()
 {
-  close()
+  close();
 }
 
 void FD::open(const std::string& filepath, int o_flag, mode_t mode)
