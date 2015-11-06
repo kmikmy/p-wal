@@ -20,7 +20,9 @@ class FD
   FD(const std::string& filepath, int o_flag, mode_t mode = 0644);
   ~FD();
 
-  operator int();
+  int fd() const {
+	return fd_;
+  }
 
   void open(const std::string& filepath, int o_flag, mode_t mode = 0644);
   void close();

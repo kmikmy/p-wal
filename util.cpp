@@ -22,11 +22,6 @@ FD::~FD()
   close()
 }
 
-FD::operator int()
-{
-  return fd_;
-}
-
 void FD::open(const std::string& filepath, int o_flag, mode_t mode)
 {
   fd_ = ::open(filepath.c_str(), o_flag, mode);
