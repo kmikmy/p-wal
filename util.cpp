@@ -33,7 +33,7 @@ void FD::open(const std::string& filepath, int o_flag, mode_t mode)
 void FD::close()
 {
   if(fd_ != -1){
-	::close(fd_);
+	::close(fd_); // ほんとは返り値をチェックすべき
 	fd_ = -1;
   }
 }
