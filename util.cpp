@@ -49,5 +49,5 @@ MyException::~MyException() throw(){}
 
 void MyException::show()
 {
-  std::cerr << "exception: " <<  cause1_ << " " << cause2_ << " " << cause3_ << std::endl;
+  std::cerr << "exception: " <<  what() << std::endl;
 }

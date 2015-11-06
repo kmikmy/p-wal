@@ -35,15 +35,15 @@ class FD
 class MyException : std::exception
 {
  public:
-  MyException(const std::string& cause1, const std::string& cause2 = "", const std::string& cause3 = "") : cause1_(cause1), cause2_(cause2), cause3_(cause3){}
-  ~MyException() throw();
+  MyException(const std::string& cause1, const std::string& cause2 = "", const std::string& cause3 = "") : cause_(cause1+' '+cause2+' '+cause3){}
 
   void show();
+  const char* what() const {
+	return cause_.c_str();
+  }
 
  protected:
-  std::string cause1_;
-  std::string cause2_;
-  std::string cause3_;
+  std::string cause_;
 };
 
 #endif
