@@ -16,7 +16,9 @@ void FD::open(const std::string& filepath, int o_flag, mode_t mode)
 
 void FD::write(const void *ptr, size_t size)
 {
-  ssize_t ret = ::write(fd_, ptr, size); // ほんとは全て書いたかをチェックする // ほんとはerrnoをチェックしてEINTRならリトライする
+  ssize_t ret = ::write(fd_, ptr, size); // ほんとは全て書いたかをチェックする
+  // ほんとはerrnoをチェックしてEINTRならリトライする
+
   if(ret == -1){
 	throw MyException("FD", "write");
   }
@@ -26,6 +28,9 @@ void FD::close()
 {
   if(fd_ != -1){
 	::close(fd_); // ほんとは返り値をチェックすべき
+	// closeに失敗したら例外を投げるようにしてもよいが、
+	// デストラクタでは例外出ないように握りつぶす必要がある
+
 	fd_ = -1;
   }
 }
