@@ -18,7 +18,7 @@ class FD
  public:
   FD();
   FD(const std::string& filepath, int o_flag, mode_t mode = 0644);
-  virtual ~FD();
+  ~FD();
 
   operator int();
 
