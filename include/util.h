@@ -35,7 +35,7 @@ class FD
 class MyException : std::exception
 {
  public:
-  MyException(const std::string& cause1, const std::string& cause2 = "", const std::string& cause3 = "") : cause_(cause1+' '+cause2+' '+cause3){}
+  explicit MyException(const std::string& cause1, const std::string& cause2 = "", const std::string& cause3 = "") : cause_(cause1+' '+cause2+' '+cause3){}
 
   void show();
   const char* what() const {
