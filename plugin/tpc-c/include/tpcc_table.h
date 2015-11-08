@@ -5,6 +5,7 @@
 #include <iostream>
 #include "tpcc.h"
 #include "tpcc_page.h"
+#include "../../../include/log.h"
 #include "../../../include/ARIES.h"
 
 /* #ifndef W */
@@ -12,34 +13,6 @@
 /* #endif */
 
 extern DistributedTransTable *dist_trans_table;
-extern int W;
-
-class Constant{
-public:
-  int c_for_c_last;
-  int c_for_c_id;
-  int c_for_ol_i_id;
-
-  Constant(){
-    /* validate C-Run by using this value(C-Load) */
-    int fd;
-    int c_load, c_run, c_delta;
-    if((fd = open(CLOADFILENAME, O_RDONLY)) == -1 ){
-      PERR("open");
-    }
-    read(fd, &c_load, sizeof(int));
-    close(fd);
-
-    do{
-      c_run = uniform(0, 255);
-      c_delta = abs(c_run - c_load);
-    }while( !(65 <= c_delta && c_delta <= 119 && c_delta != 96 && c_delta != 112) );
-
-    c_for_c_last = c_run;
-    c_for_c_id = uniform(0, 1023);
-    c_for_ol_i_id = uniform(0, 8191);
-  }
-};
 
 class Table{
 };
@@ -51,10 +24,10 @@ class Warehouse : public Table{
   static uint32_t loaded_npage; // the number of loaded pages
   static uint32_t inserted_npage; // the number of inserted pages
   static pthread_mutex_t insert_lock;
-  
+
   static TPCC_PAGE_LIST *first_appended_page;
   static TPCC_PAGE_LIST *last_appended_page;
-  
+
   static pthread_rwlock_t *locks;
   static std::set<uint32_t> my_lock_table[32]; // worker毎に存在するロックテーブル
 
@@ -63,7 +36,7 @@ class Warehouse : public Table{
     try {
       npage = W;
       loaded_npage = npage;
-      pages = new PageWarehouse[npage]; 
+      pages = new PageWarehouse[npage];
       locks = new pthread_rwlock_t[npage];
       for(uint32_t i=0;i<npage;i++){
 	pthread_rwlock_init(&locks[i], NULL);
@@ -108,11 +81,11 @@ class Warehouse : public Table{
 	  if(ret == 0) break; //success
 	}
       }
-      //lockが完了したら、ロックテーブルに追加      
+      //lockが完了したら、ロックテーブルに追加
       my_lock_table[thId].insert(pageId);
     }
 
-    else{ 
+    else{
       // read_lockからwrite_lockへの昇格はまだ実装していない
       // upgrade_lockを使う必要がありそう
       ; //既に該当ページのロックを獲得している場合は何もしない
@@ -136,7 +109,7 @@ class Warehouse : public Table{
       lock_page(pages[w_id-1].page_id, thId, true);
       return &pages[w_id-1];
     }
-    else 
+    else
       return NULL;
   }
 };
@@ -148,7 +121,7 @@ class District : public Table{
   static uint32_t loaded_npage; // the number of loaded pages
   static uint32_t inserted_npage; // the number of inserted pages
   static pthread_mutex_t insert_lock;
-  
+
   static TPCC_PAGE_LIST *first_appended_page;
   static TPCC_PAGE_LIST *last_appended_page;
 
@@ -160,7 +133,7 @@ class District : public Table{
     try {
       npage = W*10;
       loaded_npage = npage;
-      pages = new PageDistrict[npage]; 
+      pages = new PageDistrict[npage];
       locks = new pthread_rwlock_t[npage];
       for(uint32_t i=0;i<npage;i++){
 	pthread_rwlock_init(&locks[i], NULL);
@@ -205,11 +178,11 @@ class District : public Table{
 	  if(ret == 0) break; //success
 	}
       }
-      //lockが完了したら、ロックテーブルに追加      
+      //lockが完了したら、ロックテーブルに追加
       my_lock_table[thId].insert(pageId);
     }
 
-    else{ 
+    else{
       // read_lockからwrite_lockへの昇格はまだ実装していない
       // upgrade_lockを使う必要がありそう
       ; //既に該当ページのロックを獲得している場合は何もしない
@@ -293,7 +266,7 @@ class Customer : public Table{
   static uint32_t loaded_npage; // the number of loaded pages
   static uint32_t inserted_npage; // the number of inserted pages
   static pthread_mutex_t insert_lock;
-  
+
   static TPCC_PAGE_LIST *first_appended_page;
   static TPCC_PAGE_LIST *last_appended_page;
 
@@ -305,7 +278,7 @@ class Customer : public Table{
     try {
       npage = W*10*3000;
       loaded_npage = npage;
-      pages = new PageCustomer[npage]; 
+      pages = new PageCustomer[npage];
       locks = new pthread_rwlock_t[npage];
       for(uint32_t i=0;i<npage;i++){
 	pthread_rwlock_init(&locks[i], NULL);
@@ -349,11 +322,11 @@ class Customer : public Table{
 	  if(ret == 0) break; //success
 	}
       }
-      //lockが完了したら、ロックテーブルに追加      
+      //lockが完了したら、ロックテーブルに追加
       my_lock_table[thId].insert(pageId);
     }
 
-    else{ 
+    else{
       // read_lockからwrite_lockへの昇格はまだ実装していない
       // upgrade_lockを使う必要がありそう
       ; //既に該当ページのロックを獲得している場合は何もしない
@@ -374,7 +347,7 @@ class Customer : public Table{
   static PageCustomer*
   select1(uint32_t w_id, uint32_t d_id, uint32_t c_id, int thId){
     return &pages[((w_id-1)*10+(d_id-1))*3000+(c_id-1)];
-    
+
     for(uint32_t i=0;i<npage;i++){
       if(pages[i].c_w_id == w_id && pages[i].c_d_id == d_id && pages[i].c_id == c_id){
 	lock_page(pages[i].page_id, thId, true);
@@ -392,7 +365,7 @@ public:
   static uint32_t loaded_npage; // the number of loaded pages
   static uint32_t inserted_npage; // the number of inserted pages
   static pthread_mutex_t insert_lock;
-  
+
   static TPCC_PAGE_LIST *first_appended_page[MAX_WORKER_THREAD];
   static TPCC_PAGE_LIST *last_appended_page[MAX_WORKER_THREAD];
 
@@ -404,7 +377,7 @@ public:
     try {
       npage = W*10*900;
       loaded_npage = npage;
-      pages = new PageNewOrder[npage]; 
+      pages = new PageNewOrder[npage];
       locks = new pthread_rwlock_t[npage];
       for(uint32_t i=0;i<npage;i++){
 	pthread_rwlock_init(&locks[i], NULL);
@@ -500,7 +473,7 @@ public:
   static uint32_t loaded_npage; // the number of loaded pages
   static uint32_t inserted_npage; // the number of inserted pages
   static pthread_mutex_t insert_lock;
-  
+
   static TPCC_PAGE_LIST *first_appended_page[MAX_WORKER_THREAD];
   static TPCC_PAGE_LIST *last_appended_page[MAX_WORKER_THREAD];
 
@@ -512,7 +485,7 @@ public:
     try {
       npage = W*10*3000;
       loaded_npage = npage;
-      pages = new PageOrder[npage]; 
+      pages = new PageOrder[npage];
       locks = new pthread_rwlock_t[npage];
       for(uint32_t i=0;i<npage;i++){
 	pthread_rwlock_init(&locks[i], NULL);
@@ -606,7 +579,7 @@ public:
   static uint32_t loaded_npage; // the number of loaded pages
   static uint32_t inserted_npage; // the number of inserted pages
   static pthread_mutex_t insert_lock;
-  
+
   static TPCC_PAGE_LIST *first_appended_page;
   static TPCC_PAGE_LIST *last_appended_page;
 
@@ -618,7 +591,7 @@ public:
     try {
       npage = 100000;
       loaded_npage = npage;
-      pages = new PageItem[npage]; 
+      pages = new PageItem[npage];
       locks = new pthread_rwlock_t[npage];
       for(uint32_t i=0;i<npage;i++){
 	pthread_rwlock_init(&locks[i], NULL);
@@ -662,9 +635,9 @@ public:
 	  if(ret == 0) break; //success
 	}
       }
-      //lockが完了したら、ロックテーブルに追加      
+      //lockが完了したら、ロックテーブルに追加
       my_lock_table[thId].insert(pageId);
-    } else{ 
+    } else{
       // read_lockからwrite_lockへの昇格はまだ実装していない
       // upgrade_lockを使う必要がありそう
       ; //既に該当ページのロックを獲得している場合は何もしない
@@ -679,7 +652,7 @@ public:
     for(it=my_lock_table[thId].begin(); it!=my_lock_table[thId].end();++it){
       pthread_rwlock_unlock(&locks[*it-1]);
     }
-    
+
     my_lock_table[thId].clear();
   }
 
@@ -702,7 +675,7 @@ class Stock : public Table{
   static uint32_t loaded_npage; // the number of loaded pages
   static uint32_t inserted_npage; // the number of inserted pages
   static pthread_mutex_t insert_lock;
-  
+
   static TPCC_PAGE_LIST *first_appended_page;
   static TPCC_PAGE_LIST *last_appended_page;
 
@@ -714,7 +687,7 @@ class Stock : public Table{
     try {
       npage = W*10*100000;
       loaded_npage = npage;
-      pages = new PageStock[npage]; 
+      pages = new PageStock[npage];
       locks = new pthread_rwlock_t[npage];
       for(uint32_t i=0;i<npage;i++){
 	pthread_rwlock_init(&locks[i], NULL);
@@ -758,11 +731,11 @@ class Stock : public Table{
 	  if(ret == 0) break; //success
 	}
       }
-      //lockが完了したら、ロックテーブルに追加      
+      //lockが完了したら、ロックテーブルに追加
       my_lock_table[thId].insert(pageId);
     }
 
-    else{ 
+    else{
       // read_lockからwrite_lockへの昇格はまだ実装していない
       // upgrade_lockを使う必要がありそう
       ; //既に該当ページのロックを獲得している場合は何もしない
@@ -850,7 +823,7 @@ class OrderLine : public Table{
   static uint32_t loaded_npage; // the number of loaded pages
   static uint32_t inserted_npage; // the number of inserted pages
   static pthread_mutex_t insert_lock;
-  
+
   static TPCC_PAGE_LIST *first_appended_page[MAX_WORKER_THREAD];
   static TPCC_PAGE_LIST *last_appended_page[MAX_WORKER_THREAD];
 
@@ -862,7 +835,7 @@ class OrderLine : public Table{
     try {
       npage = W*10*3000*15;
       loaded_npage = npage;
-      pages = new PageOrderLine[npage]; 
+      pages = new PageOrderLine[npage];
       locks = new pthread_rwlock_t[npage];
       for(uint32_t i=0;i<npage;i++){
 	pthread_rwlock_init(&locks[i], NULL);

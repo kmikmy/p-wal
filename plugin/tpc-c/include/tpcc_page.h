@@ -1,18 +1,20 @@
 #ifndef _tpcc_page
 #define _tpcc_page
 
-#define WFILENAME "/home/kamiya/hpcs/aries/plugin/tpc-c/table/warehouse.dat"
-#define DFILENAME "/home/kamiya/hpcs/aries/plugin/tpc-c/table/district.dat"
-#define CFILENAME "/home/kamiya/hpcs/aries/plugin/tpc-c/table/customer.dat"
-#define HFILENAME "/home/kamiya/hpcs/aries/plugin/tpc-c/table/history.dat"
-#define NOFILENAME "/home/kamiya/hpcs/aries/plugin/tpc-c/table/new_order.dat"
-#define OFILENAME "/home/kamiya/hpcs/aries/plugin/tpc-c/table/order.dat"
-#define OLFILENAME "/home/kamiya/hpcs/aries/plugin/tpc-c/table/order_line.dat"
-#define SFILENAME "/home/kamiya/hpcs/aries/plugin/tpc-c/table/stock.dat"
-#define IFILENAME "/home/kamiya/hpcs/aries/plugin/tpc-c/table/item.dat"
+#include <string>
 
-/* CLOADFILENAME is filename for C-Load*/ 
-#define CLOADFILENAME "/home/kamiya/hpcs/aries/plugin/tpc-c/table/c_load_c_last.dat"
+const std::string WFILENAME = "/home/kamiya/hpcs/aries/plugin/tpc-c/table/warehouse.dat";
+const std::string DFILENAME = "/home/kamiya/hpcs/aries/plugin/tpc-c/table/district.dat";
+const std::string CFILENAME = "/home/kamiya/hpcs/aries/plugin/tpc-c/table/customer.dat";
+const std::string HFILENAME = "/home/kamiya/hpcs/aries/plugin/tpc-c/table/history.dat";
+const std::string NOFILENAME = "/home/kamiya/hpcs/aries/plugin/tpc-c/table/new_order.dat";
+const std::string OFILENAME = "/home/kamiya/hpcs/aries/plugin/tpc-c/table/order.dat";
+const std::string OLFILENAME = "/home/kamiya/hpcs/aries/plugin/tpc-c/table/order_line.dat";
+const std::string SFILENAME = "/home/kamiya/hpcs/aries/plugin/tpc-c/table/stock.dat";
+const std::string IFILENAME = "/home/kamiya/hpcs/aries/plugin/tpc-c/table/item.dat";
+
+/* CLOADFILENAME = is filename for C-Load*/
+const std::string CLOADFILENAME = "/home/kamiya/hpcs/aries/plugin/tpc-c/table/c_load_c_last.dat";
 
 class TPCC_PAGE{
  public:
@@ -65,7 +67,7 @@ class PageDistrict: public TPCC_PAGE{
   char d_state[3]; // char(2)
   char d_zip[10]; // char(9)
   double d_tax; // DECIMAL(4,4) 全部で四桁(少数点以下4桁)
-  double d_ytd; // DECIMAL(12,2)  
+  double d_ytd; // DECIMAL(12,2)
   uint32_t d_next_o_id; // 10,000,000のユニークな値の範囲．次の利用可能な注文番号
 };
 
@@ -93,9 +95,9 @@ class PageCustomer: public TPCC_PAGE{
   char c_credit[3]; // char(2) "GC=good", "BC"=bad
   double c_credit_lim; // DECIMAL(12,2)
   double c_discount; // DECIMAL(4,4)
-  double c_balance; // DECIMAL(12,2)  
-  double c_ytd_payment; // DECIMAL(12,2)  
-  uint32_t c_payment_cnt; // DECIMAL(4,0)  
+  double c_balance; // DECIMAL(12,2)
+  double c_ytd_payment; // DECIMAL(12,2)
+  uint32_t c_payment_cnt; // DECIMAL(4,0)
   uint32_t c_delivery_cnt; // DECIMAL(4,0)
   char c_data[501]; // varchar(500)
 };
@@ -108,7 +110,7 @@ class PageCustomer: public TPCC_PAGE{
 
   Comment: ，ベンチマークのコンテキスト内で，このテーブル内の行を一意に特定する必要がないので，ヒストリーテーブルの行はpkを持たない．
   Note: TPC-Cアプリケーションは6,000を超えたC_IDの範囲を利用できる必要はない．
-  
+
 */
 class PageHistory: public TPCC_PAGE{
  public:
@@ -124,7 +126,7 @@ class PageHistory: public TPCC_PAGE{
 
 /*
   NewOrder
-  
+
   PK: no_w_id, no_d_id, no_o_id
   FK: no_w_id(ref: o_w_id), no_d_id(ref: o_d_id), no_o_id(ref: o_id)
 */
@@ -150,7 +152,7 @@ class PageOrder: public TPCC_PAGE{
   char o_entry_d[32]; // datetime # "Fri May 11 21:44:53 2001\n\0" may be 26
   uint32_t o_carrier_id; // 10のユニークID, or null
   uint32_t o_ol_cnt; // DECIMAL(2,0)．Order-Linesの数
-  uint32_t o_all_local; // DECIMAL(1,0)  
+  uint32_t o_all_local; // DECIMAL(1,0)
 };
 
 

@@ -8,7 +8,7 @@
 #define _tpc
 
 #include "tpcc_util.h"
-#include "tpcc_table.h"
+//#include "tpcc_table.h"
 #include "tpcc_page.h"
 #include "workload.h"
 #include "debug.h"

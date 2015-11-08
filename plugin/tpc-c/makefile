@@ -8,7 +8,7 @@ all: tpcc_test
 
 .SUFFIXES: .cpp .o
 
-.cpp.o:	
+.cpp.o:
 	$(CC) $(CFLAGS) -MMD -MP -c $<
 
 .PHONY: clean
@@ -19,9 +19,11 @@ clean:
 new-order: $(objs)
 	$(CC) $(CFLAGS) -o $(program).exe $^
 
-create_tables: create_tables.o tpcc_util.o
+util.o :
+	$(CC) $(CFLAGS) -c ../../util.cpp
+
+create_tables: create_tables.o tpcc_util.o util.o
 	$(CC) $(CFLAGS) -o create_tables.exe $^
 
 load_tables: load_tables.o
 	$(CC) $(CFLAGS) -o load_tables.exe $^
-
