@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <string>
 #include <exception>
 #include <iostream>
@@ -20,13 +21,9 @@ class FD
   FD(const std::string& filepath, int o_flag, mode_t mode = 0644) : fd_(-1){
 	open(filepath, o_flag, mode);
   }
-  ~FD(){
-	close();
-  }
+  ~FD(){ close(); }
 
-  int fd() const {
-	return fd_;
-  }
+  int fd() const { return fd_; }
 
   void open(const std::string& filepath, int o_flag, mode_t mode = 0644);
   void write(const void *ptr, size_t size);
