@@ -1,6 +1,6 @@
 # Makefile
 program = new-order
-objs = new-order.o tpcc_util.o tpcc_table.o
+objs = new-order.o tpcc_util.o tpcc_table.o util.o
 CC = g++
 CFLAGS = -g -Wall -std=c++0x -lpthread -O0 -gstabs+
 

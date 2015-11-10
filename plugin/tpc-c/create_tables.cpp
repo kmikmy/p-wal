@@ -3,7 +3,9 @@
 #include <cstring>
 #include <unistd.h>
 #include <vector>
+#include <exception>
 #include "../../include/util.h"
+#include "../../include/cmdline.h"
 #include "include/tpcc.h"
 #include "include/tpcc_page.h"
 #include "include/tpcc_util.h"
@@ -31,7 +33,7 @@ create_warehouse(){
   fd.open(WFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageWarehouse));
 
-  std::cout << "create warehouse " << pages.size() << "records" << std::endl;
+  std::cerr << "create warehouse " << pages.size() << "records" << std::endl;
 }
 
 void create_district(){
@@ -60,7 +62,7 @@ void create_district(){
   fd.open(DFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageDistrict));
 
-  std::cout << "create district " << pages.size() << "records" << std::endl;
+  std::cerr << "create district " << pages.size() << "records" << std::endl;
 }
 
 void create_customer(){
@@ -118,7 +120,7 @@ void create_customer(){
 
   fd.write(&pages[0], pages.size()*sizeof(PageCustomer));
 
-  std::cout << "create customer " << pages.size() << "records" << std::endl;
+  std::cerr << "create customer " << pages.size() << "records" << std::endl;
 }
 
 void create_history(){
@@ -130,8 +132,7 @@ void create_history(){
       for(int k=0; k<3000; k++){
 	int idx = i*10*3000 + j*3000 + k;
 
-	pages[idx].page_id = i++;
-
+	pages[idx].page_id = i;
 	pages[idx].h_c_w_id = i+1;
 	pages[idx].h_c_d_id = j+1;
 	pages[idx].h_c_id = k+1;
@@ -146,7 +147,7 @@ void create_history(){
   fd.open(HFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageHistory));
 
-  std::cout << "create history " << pages.size() << "records" << std::endl;
+  std::cerr << "create history " << pages.size() << "records" << std::endl;
 }
 
 static void create_order_line(std::vector<PageOrderLine> &pages, PageOrder &order){
@@ -194,7 +195,7 @@ void create_new_order(){
   fd.open(NOFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageNewOrder));
 
-  std::cout << "create new-order " << pages.size() << "records" << std::endl;
+  std::cerr << "create new-order " << pages.size() << "records" << std::endl;
 }
 
 static void create_order(){
@@ -238,8 +239,8 @@ static void create_order(){
   ol_fd.open(OLFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   ol_fd.write(&ol_pages[0], ol_pages.size()*sizeof(PageOrderLine));
 
-  std::cout << "create order-line " << ol_pages.size() << "records" << std::endl;
-  std::cout << "create new-order " << pages.size() << "records" << std::endl;
+  std::cerr << "create order-line " << ol_pages.size() << "records" << std::endl;
+  std::cerr << "create new-order " << pages.size() << "records" << std::endl;
 }
 
 void create_item(){
@@ -259,7 +260,7 @@ void create_item(){
   fd.open(IFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageItem));
 
-  std::cout << "create item " << pages.size() << "records" << std::endl;
+  std::cerr << "create item " << pages.size() << "records" << std::endl;
 }
 
 void create_stock(){
@@ -294,9 +295,30 @@ void create_stock(){
   fd.open(SFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageStock));
 
-  std::cout << "create stock " << pages.size()<< "records" << std::endl;
+  std::cerr << "create stock " << pages.size()<< "records" << std::endl;
 }
 
+void create_table(const std::string &tablename){
+  if(tablename.compare("warehouse") == 0){
+    create_warehouse();
+  } else if(tablename.compare("district") == 0){
+    create_district();
+  } else if(tablename.compare("history") == 0){
+    create_history();
+  } else if(tablename.compare("new-order") == 0){
+    create_new_order();
+  } else if(tablename.compare("order") == 0){
+    create_order();
+  } else if(tablename.compare("item") == 0){
+    create_item();
+  } else if(tablename.compare("stock") == 0){
+    create_stock();
+  } else if(tablename.compare("customer") == 0){
+    create_customer();
+  } else {
+    std::cerr << "tablename is invalid!" << std::endl;
+  }
+}
 
 void create_all(){
   create_warehouse();
@@ -311,24 +333,31 @@ void create_all(){
 }
 
 int main(int argc, char *argv[]){
-  int result = 0;
-  W = 1;
-  std::string str;
-  while ((result = getopt(argc, argv, "w:")) != -1) {
-    switch(result){
-    case 'w':
-      str = optarg;
-      W = atoi(str.c_str());
-      printf("option %c applied with %s\n", result, str.c_str());
-      break;
-    case ':': // default
+  cmdline::parser p;
+
+  try{
+    //    p.add<T>("long option", 'short option', 'must need?', 'default' , CustomReader)
+    p.add<int>("scale-factor", 'w', "( 1 - 32 )", false, 1, cmdline::range(1, 32));
+    p.add<std::string>("table", 't', "( warehouse | district | history | new-order | order | item | stock | customer )", false, "", cmdline::oneof<std::string>("warehouse", "district", "history", "new-order", "order", "item", "stock", "customer"));
+    p.add("help", 0, "print help");
+
+    p.parse_check(argc, argv);
+
+    if(p.exist("scale-factor")){
+      W = p.get<int>("scale-factor");
+    } else {
       W = 1;
-    break;
-    case '?':   // invalid option
-      break;
     }
+
+
+    if(p.exist("table")){
+      create_table(p.get<std::string>("table"));
+    } else {
+      create_all();
+    }
+  } catch(std::exception e) {
+    std::cerr << e.what() << std::endl;
   }
 
-  create_all();
   return 0;
 }
