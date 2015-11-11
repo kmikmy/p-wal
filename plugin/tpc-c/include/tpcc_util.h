@@ -33,7 +33,7 @@ class Permutation{
 private:
   std::vector<int> v;
 public:
-  Permutation(int min, int max);
+  Permutation(int min, int max); // include max
   void init(int min, int max);
   int next();
 };
