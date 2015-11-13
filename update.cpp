@@ -102,7 +102,7 @@ updateOperations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int 
 	  if(pthread_rwlock_tryrdlock(&pbuf->lock) == 0)
 	    break; // 読み込みロックの獲得に成功したらbreakする。
 	} else {
-	  if(pthread_rwlock_trywrlock(&pbuf->lock) == 0) 
+	  if(pthread_rwlock_trywrlock(&pbuf->lock) == 0)
 	    break; // 書き込みロックの獲得に成功したらbreakする。
 	}
 	/*
@@ -208,10 +208,10 @@ void WALUpdate(OP op, uint32_t xid, int page_id, int th_id)
   //  lseek(fd,sizeof(Page)*page_id,SEEK_SET);
   //  if( -1 == write(fd, &p, sizeof(Page))){
   //    perror("write"); exit(1);
-  //  }    
+  //  }
 
   //  cout << "[After Update]" << endl;
-  //  cout << "page[" << p.page_id << "]: page_LSN=" << p.page_LSN << ", value=" <<  p.value << endl;  
+  //  cout << "page[" << p.page_id << "]: page_LSN=" << p.page_LSN << ", value=" <<  p.value << endl;
 }
 
 void
@@ -269,7 +269,7 @@ update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_
 
 
   FieldLogList *p;
-  TSchema *tableSchema = MasterSchema::getTableSchemaPtr(table_name);
+  TableSchema *tableSchema = MasterSchema::getTableSchemaPtr(table_name);
 
   if(tableSchema->pageSize == 0){ cout << "the table is not defined: " << table_name << endl; exit(1);}
 
@@ -302,7 +302,7 @@ update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_
       p[i-1].nxt = &p[i];
     }
 
-    FInfo finfo = tableSchema->getFieldInfo(q->field_name);
+    FieldInfo finfo = tableSchema->getFieldInfo(q->field_name);
     p[i].field_offset = finfo.offset;
     p[i].field_length = finfo.length;
     p[i].before = q->before;
@@ -499,5 +499,3 @@ rollback(uint32_t xid, int th_id)
 
   close(log_fd);
 }
-
-

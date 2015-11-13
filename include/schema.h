@@ -2,15 +2,8 @@
 #define _schema
 
 #include <map>
+#include <string>
 #include <iostream>
-#include <regex>
-
-using std::cout;
-using std::endl;
-using std::string;
-using std::regex;
-using std::vector;
-using std::map;
 
 #define SCHEMA_DIR_NAME "/data/schema/"
 
@@ -40,7 +33,7 @@ class TableHeader {
 class FieldInfo {
  public:
   FieldType ftype;
-  string fieldName;
+  std::string fieldName;
   size_t offset;
   size_t length;
 };
@@ -50,25 +43,25 @@ class FieldInfo {
 class TableSchema {
  public:
   void *head; // the pointer of 1st page.
-  string tableName;
+  std::string tableName;
   size_t nField; // the number of field
   size_t pageSize;
-  map<string, FieldInfo> fmap;
+  std::map<std::string, FieldInfo> fmap;
 
   FieldInfo
-  getFieldInfo(string str){
+  getFieldInfo(std::string str){
     return fmap[str];
   }
   void
   appendFieldInfo(FieldInfo finfo){
     fmap[finfo.fieldName] = finfo;
   }
-  string
+  std::string
   getTableName(void){
     return tableName;
   }
   void
-  setTableName(string str){
+  setTableName(std::string str){
     tableName = str;
   }
 };
@@ -81,9 +74,9 @@ class MasterSchema{
  private:
 
  public:
-  static map<string, TableSchema> tmap;
+  static std::map<std::string, TableSchema> tmap;
 
-  static TableSchema* getTableSchemaPtr(string str);
+  static TableSchema* getTableSchemaPtr(std::string str);
   static void appendTableSchema(TSchema& ts);
 };
 
