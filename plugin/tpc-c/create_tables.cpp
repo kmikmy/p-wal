@@ -33,7 +33,7 @@ create_warehouse(){
   fd.open(WFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageWarehouse));
 
-  std::cerr << "create warehouse " << pages.size() << "records" << std::endl;
+  std::cerr << "create warehouse " << pages.size() << "records: " << WFILENAME << std::endl;
 }
 
 void create_district(){
@@ -62,7 +62,7 @@ void create_district(){
   fd.open(DFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageDistrict));
 
-  std::cerr << "create district " << pages.size() << "records" << std::endl;
+  std::cerr << "create district " << pages.size() << "records: " << DFILENAME << std::endl;
 }
 
 void create_customer(){
@@ -73,8 +73,6 @@ void create_customer(){
   fd.open(CLOADFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&c_load, sizeof(c_load));
   fd.close();
-
-  fd.open(CFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
 
   int n = W*10*3000;
   std::vector<PageCustomer> pages(n);
@@ -118,9 +116,10 @@ void create_customer(){
     }
   }
 
+  fd.open(CFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageCustomer));
 
-  std::cerr << "create customer " << pages.size() << "records" << std::endl;
+  std::cerr << "create customer " << pages.size() << "records: " << CFILENAME << std::endl;
 }
 
 void create_history(){
@@ -147,7 +146,7 @@ void create_history(){
   fd.open(HFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageHistory));
 
-  std::cerr << "create history " << pages.size() << "records" << std::endl;
+  std::cerr << "create history " << pages.size() << "records: " << HFILENAME << std::endl;
 }
 
 static void create_order_line(std::vector<PageOrderLine> &pages, PageOrder &order){
@@ -195,7 +194,7 @@ void create_new_order(){
   fd.open(NOFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageNewOrder));
 
-  std::cerr << "create new-order " << pages.size() << "records" << std::endl;
+  std::cerr << "create new-order " << pages.size() << "records: " << NOFILENAME << std::endl;
 }
 
 static void create_order(){
@@ -239,8 +238,8 @@ static void create_order(){
   ol_fd.open(OLFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   ol_fd.write(&ol_pages[0], ol_pages.size()*sizeof(PageOrderLine));
 
-  std::cerr << "create order-line " << ol_pages.size() << "records" << std::endl;
-  std::cerr << "create new-order " << pages.size() << "records" << std::endl;
+  std::cerr << "create order-line " << ol_pages.size() << "records: " << OFILENAME << std::endl;
+  std::cerr << "create new-order " << pages.size() << "records: " << OLFILENAME << std::endl;
 }
 
 void create_item(){
@@ -260,7 +259,7 @@ void create_item(){
   fd.open(IFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageItem));
 
-  std::cerr << "create item " << pages.size() << "records" << std::endl;
+  std::cerr << "create item " << pages.size() << "records: " << IFILENAME << std::endl;
 }
 
 void create_stock(){
@@ -295,7 +294,7 @@ void create_stock(){
   fd.open(SFILENAME, O_CREAT | O_TRUNC | O_WRONLY, 0644);
   fd.write(&pages[0], pages.size()*sizeof(PageStock));
 
-  std::cerr << "create stock " << pages.size()<< "records" << std::endl;
+  std::cerr << "create stock " << pages.size()<< "records: " << SFILENAME << std::endl;
 }
 
 void create_table(const std::string &tablename){
