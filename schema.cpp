@@ -13,8 +13,9 @@
 
 extern char *ARIES_HOME;
 
-static FType
-getFType(string s){
+static FieldType
+getFieldType(std::string s)
+{
   if(s == "int"){
     return TYPE_INT;
   } else if(s == "double"){
@@ -27,7 +28,8 @@ getFType(string s){
 }
 
 static size_t
-getFTypeSize(string s){
+getTypeSize(std::string s)
+{
   if(s == "int"){
     return sizeof(int);
   } else if(s == "double"){
@@ -41,7 +43,8 @@ getFTypeSize(string s){
 
 
 static char*
-chomp( char* str ){
+chomp( char* str )
+{
   int l = strlen( str );
   if( l > 0 && str[l-1] == '\n' )
     {
@@ -51,20 +54,21 @@ chomp( char* str ){
 }
 
 static void
-loadSchema(const char *fname){
-  string sname = ARIES_HOME;
+loadSchema(const char *fname)
+{
+  std::string sname = ARIES_HOME;
   sname += SCHEMA_DIR_NAME;
   sname += fname;
 
   regex re("(.+):(int|double|char):(\\d+)?"); /* (fieldName):(typeName):(length)*/
   std::smatch match;
 
-  string tmp;
+  std::string tmp;
   std::ifstream ifs(sname.c_str());
 
   size_t sum = 0;
 
-  TSchema ts;
+  TableSchema ts;
   ts.setTableName(fname);
 
   while(ifs >> tmp){
@@ -72,10 +76,10 @@ loadSchema(const char *fname){
       FInfo finfo;
       finfo.fieldName = match[1];
       finfo.offset = sum;
-      finfo.ftype = getFType(match[2]);
-      int cnt = atoi(string(match[3]).c_str());
+      finfo.ftype = getFieldType(match[2]);
+      int cnt = atoi(std::string(match[3]).c_str());
       if(cnt == 0) cnt = 1;
-      finfo.length = getFTypeSize(match[2]) * cnt;
+      finfo.length = getTypeSize(match[2]) * cnt;
       ts.appendFieldInfo(finfo);
       sum += finfo.length;
     }
@@ -86,8 +90,9 @@ loadSchema(const char *fname){
 
 /* テーブル名を渡して、スキーマ情報を取得&表示する */
 void
-printSchema(const char *fname){
-  TSchema *ts = MasterSchema::getTableSchemaPtr(fname);
+printSchema(const char *fname)
+{
+  TableSchema *ts = MasterSchema::getTableSchemaPtr(fname);
   for(auto finfo : ts->fmap){
     cout << finfo.second.fieldName << ": offset=" << finfo.second.offset << ", length=" << finfo.second.length << endl;
   }
@@ -95,11 +100,12 @@ printSchema(const char *fname){
 
 /* data/schema/下にある全てのファイルを読みこんで、スキーマ情報をロードする */
 void
-loadAllSchema(){
+loadAllSchema()
+{
   FILE *fp;
   char buf[BUFSIZ];
-  vector<string> files;
-  string cmd = "/bin/ls ";
+  vector<std::string> files;
+  std::string cmd = "/bin/ls ";
   cmd += ARIES_HOME;
   cmd += SCHEMA_DIR_NAME;
 
@@ -120,16 +126,15 @@ loadAllSchema(){
 }
 
 
-TSchema*
-MasterSchema::getTableSchemaPtr(string str){
+TableSchema*
+MasterSchema::getTableSchemaPtr(std::string str){
   return &tmap[str];
 }
 
 void
-MasterSchema::appendTableSchema(TSchema& ts){
+MasterSchema::appendTableSchema(TableSchema& ts){
   tmap[ts.getTableName()] = ts;
 }
 
 
-map<string, TSchema> MasterSchema::tmap;
-
+map<std::string, TableSchema> MasterSchema::tmap;

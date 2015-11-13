@@ -14,20 +14,20 @@ using std::map;
 
 #define SCHEMA_DIR_NAME "/data/schema/"
 
-enum FType {TYPE_INT, TYPE_DOUBLE, TYPE_CHAR, TYPE_NONE};
+enum FieldType {TYPE_INT, TYPE_DOUBLE, TYPE_CHAR, TYPE_NONE};
 
 /*
-  ##################################### 
+  #####################################
   function declaration
-  ##################################### 
+  #####################################
 */
 
 void loadAllSchema(); // MasterSchemaクラスの静的メンバに全てのスキーマをロードする
 void printSchema(const char *fname);
 /*
-  ##################################### 
+  #####################################
   class definition
-  ##################################### 
+  #####################################
 */
 
 class TableHeader {
@@ -37,9 +37,9 @@ class TableHeader {
 
 
 /* information of field on table */
-class FInfo {
+class FieldInfo {
  public:
-  FType ftype;
+  FieldType ftype;
   string fieldName;
   size_t offset;
   size_t length;
@@ -47,20 +47,20 @@ class FInfo {
 
 
 /* information of table schema */
-class TSchema {
+class TableSchema {
  public:
   void *head; // the pointer of 1st page.
   string tableName;
   size_t nField; // the number of field
   size_t pageSize;
-  map<string, FInfo> fmap; 
+  map<string, FieldInfo> fmap;
 
-  FInfo
+  FieldInfo
   getFieldInfo(string str){
     return fmap[str];
   }
   void
-  appendFieldInfo(FInfo finfo){
+  appendFieldInfo(FieldInfo finfo){
     fmap[finfo.fieldName] = finfo;
   }
   string
@@ -81,9 +81,9 @@ class MasterSchema{
  private:
 
  public:
-  static map<string, TSchema> tmap;
+  static map<string, TableSchema> tmap;
 
-  static TSchema* getTableSchemaPtr(string str);
+  static TableSchema* getTableSchemaPtr(string str);
   static void appendTableSchema(TSchema& ts);
 };
 
