@@ -1,0 +1,8 @@
+o_id:int:
+o_d_id:int:
+o_w_id:int:
+o_c_id:int:
+o_entry_d:char:32
+o_carrier_id:int:
+o_ol_cnt:int:
+o_all_local:int:

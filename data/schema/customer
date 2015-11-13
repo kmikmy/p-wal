@@ -1,0 +1,4 @@
+c_id:int:
+c_discount:double:
+c_first_name:char:40
+c_last_name:char:40
