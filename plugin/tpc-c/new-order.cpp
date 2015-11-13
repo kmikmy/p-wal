@@ -57,7 +57,7 @@ TpccTransaction::TpccTransaction(uint32_t _xid, int _thId){
   xid = _xid;
   thId = _thId;
 }
-  
+
 void
 TpccTransaction::begin(){
   Log log;
@@ -74,11 +74,11 @@ TpccTransaction::begin(){
   dist_trans_table[thId].LastOffset = log.Offset;
 
 #ifdef DEBUG
-  Logger::log_debug(log);  
+  Logger::log_debug(log);
 #endif
 }
 
-void 
+void
 TpccTransaction::end(){
   Log log;
   memset(&log,0,sizeof(log));
@@ -87,7 +87,7 @@ TpccTransaction::end(){
   log.PrevLSN = dist_trans_table[thId].LastLSN;
   log.PrevOffset = dist_trans_table[thId].LastOffset;
   log.UndoNxtLSN = 0; /* 一度 END ログが書かれたトランザクションは undo されることはない */
-  log.UndoNxtOffset = 0; 
+  log.UndoNxtOffset = 0;
 
   Logger::log_write(&log,thId);
 
@@ -95,11 +95,11 @@ TpccTransaction::end(){
   memset(&dist_trans_table[thId], 0, sizeof(DistributedTransTable));
 
 #ifdef DEBUG
-  Logger::log_debug(log);  
+  Logger::log_debug(log);
 #endif
 }
 
-void 
+void
 TpccTransaction::run(){
   begin();
   int ret = procedure();
@@ -148,7 +148,7 @@ XNewOrder::procedure(){
   rbk = uniform(1, 100); /* rbj is used to choose rollback transaction */
 
   try {
-    ol_i_id = new uint32_t[ol_cnt]; 
+    ol_i_id = new uint32_t[ol_cnt];
     ol_supply_w_id = new uint32_t[ol_cnt];
     ol_quantity = new uint32_t[ol_cnt];
   }
@@ -161,7 +161,7 @@ XNewOrder::procedure(){
     if(rbk == 1 && i == ol_cnt-1){ /* A fixed 1% of the New-Order transactions do rollback */
       ol_i_id[i] = 999999;
     }
-      
+
     if( 1 < uniform(1,100)){
       ol_supply_w_id[i] = w_id;
     } else {
@@ -171,7 +171,7 @@ XNewOrder::procedure(){
     }
     ol_quantity[i] = uniform(1,10);
   }
-  
+
   std::sort(ol_i_id, ol_i_id+ol_cnt); // デッドロックを起こさないようにするため、昇順にページを選択する
   gen_date_and_time(o_entry_d);
 
@@ -217,6 +217,8 @@ XNewOrder::procedure(){
   double *i_price;
   char (*i_name)[25];
   char (*i_data)[51];
+  //  std::vector<std::string> i_name(ol_cnt);
+  //  std::vector<std::string> i_data(ol_cnt);
 
   PageStock **sp;
   uint32_t *s_quantity;
@@ -251,8 +253,8 @@ XNewOrder::procedure(){
   }
 
   double total_amount = 0.0;
-  for(uint32_t i=0;i<ol_cnt;i++){    
-    //    std::cout << i+1 << "/" << ol_cnt << std::endl; 
+  for(uint32_t i=0;i<ol_cnt;i++){
+    //    std::cout << i+1 << "/" << ol_cnt << std::endl;
     //    std::cout << "item: "<< ol_i_id[i] << std::endl;
 
     ip[i] = Item::select1(ol_i_id[i], thId);
@@ -271,18 +273,20 @@ XNewOrder::procedure(){
     s_order_cnt[i] = sp[i]->s_order_cnt;
     s_remote_cnt[i] = sp[i]->s_remote_cnt;
     switch(d_id){
-    case 1: strncpy(s_dist_xx[i], sp[i]->s_dist_01, strlen(sp[i]->s_dist_01)+1); 
-    case 2: strncpy(s_dist_xx[i], sp[i]->s_dist_02, strlen(sp[i]->s_dist_02)+1); 
-    case 3: strncpy(s_dist_xx[i], sp[i]->s_dist_03, strlen(sp[i]->s_dist_03)+1); 
-    case 4: strncpy(s_dist_xx[i], sp[i]->s_dist_04, strlen(sp[i]->s_dist_04)+1); 
-    case 5: strncpy(s_dist_xx[i], sp[i]->s_dist_05, strlen(sp[i]->s_dist_05)+1); 
-    case 6: strncpy(s_dist_xx[i], sp[i]->s_dist_06, strlen(sp[i]->s_dist_06)+1); 
-    case 7: strncpy(s_dist_xx[i], sp[i]->s_dist_07, strlen(sp[i]->s_dist_07)+1);  
-    case 8: strncpy(s_dist_xx[i], sp[i]->s_dist_08, strlen(sp[i]->s_dist_08)+1); 
-    case 9: strncpy(s_dist_xx[i], sp[i]->s_dist_09, strlen(sp[i]->s_dist_09)+1); 
-    case 10: strncpy(s_dist_xx[i], sp[i]->s_dist_10, strlen(sp[i]->s_dist_10)+1); 
+      //    case 1: s_dist_xx[i] = sp[i]->s_dist_01;
+    case 1: strncpy(s_dist_xx[i], sp[i]->s_dist_01, strlen(sp[i]->s_dist_01)+1);
+    case 2: strncpy(s_dist_xx[i], sp[i]->s_dist_02, strlen(sp[i]->s_dist_02)+1);
+    case 3: strncpy(s_dist_xx[i], sp[i]->s_dist_03, strlen(sp[i]->s_dist_03)+1);
+    case 4: strncpy(s_dist_xx[i], sp[i]->s_dist_04, strlen(sp[i]->s_dist_04)+1);
+    case 5: strncpy(s_dist_xx[i], sp[i]->s_dist_05, strlen(sp[i]->s_dist_05)+1);
+    case 6: strncpy(s_dist_xx[i], sp[i]->s_dist_06, strlen(sp[i]->s_dist_06)+1);
+    case 7: strncpy(s_dist_xx[i], sp[i]->s_dist_07, strlen(sp[i]->s_dist_07)+1);
+    case 8: strncpy(s_dist_xx[i], sp[i]->s_dist_08, strlen(sp[i]->s_dist_08)+1);
+    case 9: strncpy(s_dist_xx[i], sp[i]->s_dist_09, strlen(sp[i]->s_dist_09)+1);
+    case 10: strncpy(s_dist_xx[i], sp[i]->s_dist_10, strlen(sp[i]->s_dist_10)+1);
     }
-    strncpy(s_data[i], sp[i]->s_data, strlen(sp[i]->s_data)+1); 
+    strncpy(s_data[i], sp[i]->s_data, strlen(sp[i]->s_data)+1);
+    //s_data[i] = sp[i]->s_data;
 
     if(s_quantity[i] >= ol_quantity[i]+10){
       s_quantity[i] = s_quantity[i] - ol_quantity[i];
@@ -293,7 +297,7 @@ XNewOrder::procedure(){
     ++s_order_cnt[i];
     if(ol_supply_w_id[i] != w_id )
       ++s_remote_cnt[i];
-      
+
     //    Stock::update1(s_quantity[i], s_ytd[i], s_order_cnt[i], s_remote_cnt[i], sp[i], thId, xid);
     // stockテーブルのロードに失敗しているらしい.
     olp[i].ol_amount = ol_quantity[i] * i_price[i];
@@ -306,13 +310,14 @@ XNewOrder::procedure(){
     olp[i].ol_o_id = o_id;
     olp[i].ol_number = i;
     strncpy(olp[i].ol_dist_info, s_dist_xx[i], strlen(s_dist_xx[i])+1);
+
     OrderLine::insert1(olp[i], thId, xid);
 
     total_amount += olp[i].ol_amount;
   }
 
   total_amount *= (1-c_discount) * (1+w_tax+d_tax);
-    
+
 #ifdef DEBUG
   std::cout << "*** New Order ***" << std::endl;
   std::cout << "Warehouse:\t" << w_id << "\tDistrict:\t" << d_id << std::endl;
@@ -320,13 +325,13 @@ XNewOrder::procedure(){
   std::cout << "Customer Discount:\t" << c_discount << "\tWarehouse Tax:\t" << w_tax << "\tDistrict Tax:\t" << d_tax << std::endl;
   std::cout << "Order Number:\t" << o_id << "\tNumber of Lines:\t" << ol_cnt << std::endl;
   std::cout << "Order Entry Date:\t" << o_entry_d << "\tTotal Amount:\t" << total_amount << std::endl << std::endl;
-    
+
   std::cout << "Supp_W\t" << "Item_ID\t" << std::left << std::setw(25)<< "Item Name\t" << "Qty\t" << "S\t" << "BG\t" << "Price\t" << "Amount" << std::endl;
   for(uint32_t i=0;i<ol_cnt;i++){
     std::cout << ol_supply_w_id[i] << "\t" << ol_i_id[i] << "\t" << std::setw(25) << i_name[i] << "\t" << ol_quantity[i] << "\t" << s_quantity[i] << "\t" << brand_generic[i] << "\t" << i_price[i] << "\t" << olp[i].ol_amount << std::endl;
   }
   std::cout << std::endl;
-#endif    
+#endif
 
   delete[] ol_i_id;
   delete[] ol_supply_w_id;
