@@ -6,13 +6,13 @@ program = aries
 objs = main.o schema.o transaction.o system.o logger.o update.o global.o buffer.o queue_mgr.o dpt.o # recovery.o plugin/tpc-c/new-order.o plugin/tpc-c/tpcc_table.o plugin/tpc-c/tpcc_util.o
 srcs = $(objs:%.o=%.c)
 CC = g++
-CFLAGS = -g -Wall -std=c++0x -lpthread -O2 #-lprofiler
+CFLAGS = -g -Wall -std=c++11 -lpthread -O2 #-lprofiler
 
 all: aries aries_batch aries_fio aries_fio_batch
 
 .SUFFIXES: .cpp .o
 
-.cpp.o:	
+.cpp.o:
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 .PHONY: clean
@@ -31,10 +31,10 @@ aries_batch: $(objs)
 	$(CC) $(CFLAGS) -o $(program)_batch.exe $^
 
 aries_fio: $(objs)
-	$(CC) $(CFLAGS) -DFIO -c logger.cpp 
+	$(CC) $(CFLAGS) -DFIO -c logger.cpp
 	$(CC) $(CFLAGS) -DFIO -c system.cpp
 #	$(CC) $(CFLAGS) -DFIO -c recovery.cpp
-	$(CC) $(CFLAGS) -c queue_mgr.cpp	
+	$(CC) $(CFLAGS) -c queue_mgr.cpp
 	$(CC) $(CFLAGS) -o $(program)_fio.exe $(objs)
 
 aries_fio_batch: $(objs)

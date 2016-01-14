@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <cstdint>
+#include <vector>
 #include "table.h"
 
 #define LOG_OFFSET (1073741824) // 1GB
@@ -76,7 +77,7 @@ class Logger
 
   static const char* logpath;
   static void setNumGroupCommit(int group_param);
-  static int logWrite(Log *log, FieldLogList *field_log_list, int th_id);
+  static int logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id);
   static void logFlush(int th_id);
   static void logAllFlush();
   static void logDebug(Log log);

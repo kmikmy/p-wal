@@ -228,9 +228,8 @@ class LogBuffer{
   }
 
   void
-  push(Log *log, FieldLogList *field_log_list)
+  push(Log *log, std::vector<FieldLogList> &bkpblock)
   {
-    FieldLogList *p;
     int id = getDoubleBufferFlag();
     int ptr = getPtrOnChunk();
 
@@ -241,13 +240,13 @@ class LogBuffer{
     memcpy(&log_buffer_body[id][ptr], log, sizeof(Log));
     ptr += sizeof(Log);
 
-    for(p = field_log_list; p != NULL; p = p->nxt){ // fieldLogListが最初からNULLの場合は何もしない
-      memcpy(&log_buffer_body[id][ptr], p, sizeof(FieldLogHeader)); // 更新フィールドのオフセットと長さ
+    for(unsigned i=0; i<bkpblock.size(); i++){
+      memcpy(&log_buffer_body[id][ptr], &bkpblock[i], sizeof(FieldLogHeader)); // 更新フィールドのオフセットと長さ
       ptr += sizeof(FieldLogHeader);
-      memcpy(&log_buffer_body[id][ptr], p->before, p->field_length);
-      ptr += p->field_length;
-      memcpy(&log_buffer_body[id][ptr], p->after, p->field_length);
-      ptr += p->field_length;
+      memcpy(&log_buffer_body[id][ptr], &bkpblock[i].before, bkpblock[i].field_length);
+      ptr += bkpblock[i].field_length;
+      memcpy(&log_buffer_body[id][ptr], &bkpblock[i].after, bkpblock[i].field_length);
+      ptr += bkpblock[i].field_length;
     }
 
     ptr_on_chunk_ = ptr;
@@ -331,7 +330,7 @@ Logger::init()
 }
 
 int
-Logger::logWrite(Log *log, FieldLogList *field_log_list, int th_id)
+Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
 {
   LSN_and_Offset lsn_and_offset;
   bool try_push = true;

@@ -1,5 +1,6 @@
 #include "include/ARIES.h"
 #include "include/schema.h"
+#include <memory>
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
@@ -171,6 +172,8 @@ void WALUpdate(OP op, uint32_t xid, int page_id, int th_id)
   pageFix(page_id, th_id); // pageがBCBにfixされていなかったらfix。既にfixされている場合はfixed_countを+1する。
 
   Log log;
+  std::vector<FieldLogList> empty;
+
   //   LSNはログを書き込む直前に決定する
   log.trans_id = xid;
   log.type = UPDATE;
@@ -192,7 +195,7 @@ void WALUpdate(OP op, uint32_t xid, int page_id, int th_id)
 
   //  ARIES_SYSTEM::transtable_debug();
 
-  Logger::logWrite(&log, NULL, th_id);
+  Logger::logWrite(&log, empty, th_id);
   pbuf->page.page_LSN = log.lsn;
 
 
@@ -218,13 +221,15 @@ void
 begin(uint32_t xid, int th_id=0)
 {
   Log log;
+  std::vector<FieldLogList> empty;
+
   memset(&log,0,sizeof(log));
   log.trans_id = xid;
   log.type = BEGIN;
   log.total_field_length=0;
   log.total_length=sizeof(Log);
 
-  Logger::logWrite(&log, NULL, th_id);
+  Logger::logWrite(&log, empty, th_id);
 
   dist_trans_table[th_id].TransID = xid;
   dist_trans_table[th_id].LastLSN = log.lsn;
@@ -242,6 +247,7 @@ void
 end(uint32_t xid, int th_id=0)
 {
   Log log;
+  std::vector<FieldLogList> empty;
   memset(&log,0,sizeof(log));
   log.trans_id = xid;
   log.type = END;
@@ -252,7 +258,7 @@ end(uint32_t xid, int th_id=0)
   log.total_field_length=0;
   log.total_length=sizeof(Log);
 
-  Logger::logWrite(&log, NULL, th_id);
+  Logger::logWrite(&log, empty, th_id);
 
   /* dist_transaction_tableのエントリを削除する. */
   memset(&dist_trans_table[th_id], 0, sizeof(DistributedTransTable));
@@ -266,9 +272,8 @@ void
 update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_id, uint32_t xid, uint32_t thId)
 {
   Log log;
-
-
-  FieldLogList *p;
+  size_t total_field_length=0;
+  std::vector<FieldLogList> p(update_field_num);
   TableSchema *tableSchema = MasterSchema::getTableSchemaPtr(table_name);
 
   if(tableSchema->pageSize == 0){ cout << "the table is not defined: " << table_name << endl; exit(1);}
@@ -290,13 +295,6 @@ update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_
   strncpy(log.table_name, table_name, strlen(table_name)+1);
   log.field_num = update_field_num;
 
-  size_t total_field_length=0;
-  try{
-    p = new FieldLogList[update_field_num];
-  } catch(std::bad_alloc e){
-    PERR("new");
-  }
-
   for(int i=0;i < update_field_num;i++, q = q->nxt){
     if(i > 0){
       p[i-1].nxt = &p[i];
@@ -312,14 +310,10 @@ update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_
     total_field_length += sizeof(size_t)*2 + finfo.length*2;
   }
 
-  // total_field_lengthが入っていない可能性がある?
-
   log.total_field_length = total_field_length;
   log.total_length = total_field_length + sizeof(LogRecordHeader);
 
   Logger::logWrite(&log, p, thId);
-
-  delete[] p;
 }
 
 /*
@@ -346,6 +340,8 @@ rollback(uint32_t xid, int th_id)
   uint64_t log_offset = dist_trans_table[th_id].LastOffset; // rollbackするトランザクションの最後のLSN
 
   Log log;
+  std::vector<FieldLogList> empty;
+
   while(log_offset != 0){ // lsnが0になるのはprevLSNが0のBEGINログを処理した後
     lseek(log_fd, log_offset, SEEK_SET);
 
@@ -442,6 +438,7 @@ rollback(uint32_t xid, int th_id)
       }
 
       Log clog;
+
       memset(&clog,0,sizeof(Log));
       clog.type = COMPENSATION;
       clog.trans_id = log.trans_id;
@@ -459,7 +456,7 @@ rollback(uint32_t xid, int th_id)
 
       // compensation log recordをどこに書くかという問題はひとまず置いておく
       // とりあえず全部id=0のログブロックに書く
-      ret = Logger::logWrite(&clog, NULL, 0);
+      ret = Logger::logWrite(&clog, empty, 0);
 
 #ifdef DEBUG
       Logger::log_debug(clog);
@@ -486,7 +483,8 @@ rollback(uint32_t xid, int th_id)
       end_log.undo_nxt_lsn = 0;
       end_log.undo_nxt_offset = 0;
 
-      Logger::logWrite(&end_log, NULL, 0);
+      std::vector<FieldLogList> empty;
+      Logger::logWrite(&end_log, empty, 0);
 #ifdef DEBUG
       Logger::log_debug(end_log);
 #endif

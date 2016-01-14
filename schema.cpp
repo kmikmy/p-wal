@@ -60,7 +60,7 @@ loadSchema(const char *fname)
   sname += SCHEMA_DIR_NAME;
   sname += fname;
 
-  regex re("(.+):(int|double|char):(\\d+)?"); /* (fieldName):(typeName):(length)*/
+  std::regex re("(.+):(int|double|char):(\\d+)?"); /* (fieldName):(typeName):(length)*/
   std::smatch match;
 
   std::string tmp;
@@ -73,7 +73,7 @@ loadSchema(const char *fname)
 
   while(ifs >> tmp){
     if(regex_match(tmp, match, re)){ // match[1] is fieldName, match[2] is typeName, and match[3] is length
-      FInfo finfo;
+      FieldInfo finfo;
       finfo.fieldName = match[1];
       finfo.offset = sum;
       finfo.ftype = getFieldType(match[2]);
@@ -94,7 +94,7 @@ printSchema(const char *fname)
 {
   TableSchema *ts = MasterSchema::getTableSchemaPtr(fname);
   for(auto finfo : ts->fmap){
-    cout << finfo.second.fieldName << ": offset=" << finfo.second.offset << ", length=" << finfo.second.length << endl;
+    std::cout << finfo.second.fieldName << ": offset=" << finfo.second.offset << ", length=" << finfo.second.length << std::endl;
   }
 }
 
@@ -104,7 +104,7 @@ loadAllSchema()
 {
   FILE *fp;
   char buf[BUFSIZ];
-  vector<std::string> files;
+  std::vector<std::string> files;
   std::string cmd = "/bin/ls ";
   cmd += ARIES_HOME;
   cmd += SCHEMA_DIR_NAME;
@@ -137,4 +137,4 @@ MasterSchema::appendTableSchema(TableSchema& ts){
 }
 
 
-map<std::string, TableSchema> MasterSchema::tmap;
+std::map<std::string, TableSchema> MasterSchema::tmap;

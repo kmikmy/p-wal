@@ -77,7 +77,7 @@ class MasterSchema{
   static std::map<std::string, TableSchema> tmap;
 
   static TableSchema* getTableSchemaPtr(std::string str);
-  static void appendTableSchema(TSchema& ts);
+  static void appendTableSchema(TableSchema& ts);
 };
 
 #endif
