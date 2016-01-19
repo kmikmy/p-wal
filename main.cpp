@@ -1,4 +1,6 @@
 #include "include/ARIES.h"
+#include "include/cmdline.h"
+#include "plugin/tpc-c/include/tpcc_util.h"
 #include <cstdlib>
 #include <iostream>
 #include <pthread.h>
@@ -108,32 +110,45 @@ main(int argc, char *argv[])
     cout << "usage: ./aries num_trans num_threads num_group_commit" << endl;
   }
   else if(argc >= 4){
-    int result = 0;
-    std::string str;
-    int cpunum = sysconf(_SC_NPROCESSORS_ONLN);
-    uint32_t num_trans = atoi(argv[1]);
-    uint32_t num_threads = atoi(argv[2]);
-    uint32_t num_group_commit = atoi(argv[3]);
+    uint32_t nxact, nthread, ngroup;
+    cmdline::parser p;
 
-    //    cout << num_trans << ":" << num_threads << ":" << num_group_commit << endl;
+    p.add<int>("scale-factor", 'w', "( 1 - 32 )", false, 1, cmdline::range(1, 32));
+    p.add<int>("ntransaction", 'x', "( 1 - 100000 )", false, 1, cmdline::range(1, 100000));
+    p.add<int>("nthread", 't', "( 1 - 32 )", false, 1, cmdline::range(1, 32));
+    p.add<int>("ngroup", 'g', "( 1 - 50 )", false, 1, cmdline::range(1, 50));
 
-    Logger::setNumGroupCommit(num_group_commit);
-    while ((result = getopt(argc, argv, "w:")) != -1) {
-      switch(result){
-      case 'w':
-	str = optarg;
-	//	W = atoi(str.c_str());
-	printf("option %c applied with %s\n", result, str.c_str());
-	break;
-      case '?':   // invalid option
-	break;
-      }
+    p.parse_check(argc, argv);
+
+    int W;
+    if(p.exist("scale-factor")){
+      W = p.get<int>("scale-factor");
+    } else {
+      W = 1;
     }
-    if(num_threads > MAX_WORKER_THREAD){// || num_threads > cpunum-1){
-      cout << "Usage: ./a.out xact_num num_threads(<=" << (MAX_WORKER_THREAD<cpunum?MAX_WORKER_THREAD-1:cpunum-1) << ")" << endl;
-      return 0;
+
+    if(p.exist("nthread")){
+      nthread = p.get<int>("nthread");
+    } else {
+      nthread = 1;
     }
-    fixedThreadMode(num_trans, num_threads);
+
+    if(p.exist("ntransaction")){
+      nxact = p.get<int>("ntransaction");
+    } else {
+      nxact = 1;
+    }
+
+    if(p.exist("ngroup")){
+      ngroup = p.get<int>("ngroup");
+    } else {
+      ngroup = 1;
+    }
+    Logger::setNumGroupCommit(ngroup);
+
+    //    cout << nxact << ":" << nthread << ":" << ngroup << ":" << W << endl;
+
+    fixedThreadMode(nxact, nthread);
   }
   return 0;
 }
