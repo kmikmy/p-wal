@@ -335,7 +335,7 @@ int main(int argc, char *argv[]){
   cmdline::parser p;
 
   try{
-    //    p.add<T>("long option", 'short option', 'must need?', 'default' , CustomReader)
+    //    p.add<T>("long option", 'short option', 'help message', 'must need?', 'default' , CustomReader)
     p.add<int>("scale-factor", 'w', "( 1 - 32 )", false, 1, cmdline::range(1, 32));
     p.add<std::string>("table", 't', "( warehouse | district | history | new-order | order | item | stock | customer )", false, "", cmdline::oneof<std::string>("warehouse", "district", "history", "new-order", "order", "item", "stock", "customer"));
     p.add("help", 0, "print help");
@@ -347,7 +347,6 @@ int main(int argc, char *argv[]){
     } else {
       W = 1;
     }
-
 
     if(p.exist("table")){
       create_table(p.get<std::string>("table"));
