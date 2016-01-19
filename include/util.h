@@ -27,6 +27,7 @@ class FD
 
   void open(const std::string& filepath, int o_flag, mode_t mode = 0644);
   void write(const void *ptr, size_t size);
+  ssize_t read(void *ptr, size_t size);
   void close();
 
  private:

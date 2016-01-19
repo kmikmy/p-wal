@@ -24,6 +24,18 @@ void FD::write(const void *ptr, size_t size)
   }
 }
 
+ssize_t FD::read(void *ptr, size_t size)
+{
+  ssize_t ret = ::read(fd_, ptr, size); // ほんとは全て書いたかをチェックする
+  // ほんとはerrnoをチェックしてEINTRならリトライする
+
+  if(ret == -1){
+	throw MyException("FD", "read");
+  }
+
+  return ret;
+}
+
 void FD::close()
 {
   if(fd_ != -1){
