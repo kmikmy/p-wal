@@ -7,7 +7,7 @@
 
 #define SCHEMA_DIR_NAME "/data/schema/"
 
-enum FieldType {TYPE_INT, TYPE_DOUBLE, TYPE_CHAR, TYPE_NONE};
+enum FieldType {TYPE_INT, TYPE_DOUBLE, TYPE_CHAR, TYPE_UINT32, TYPE_UINT64, TYPE_NONE};
 
 /*
   #####################################

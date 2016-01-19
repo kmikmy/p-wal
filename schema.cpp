@@ -22,6 +22,10 @@ getFieldType(std::string s)
     return TYPE_DOUBLE;
   } else if(s == "char"){
     return TYPE_CHAR;
+  } else if(s == "uint32_t"){
+    return TYPE_UINT32;
+  } else if(s == "uint64_t"){
+    return TYPE_UINT64;
   } else {
     return TYPE_NONE;
   }
@@ -36,6 +40,10 @@ getTypeSize(std::string s)
     return sizeof(double);
   } else if(s == "char"){
     return sizeof(char);
+  } else if(s == "uint32_t"){
+    return sizeof(uint32_t);
+  } else if(s == "uint64_t"){
+    return sizeof(uint64_t);
   } else {
     return 0;
   }
