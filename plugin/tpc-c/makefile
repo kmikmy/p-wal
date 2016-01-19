@@ -25,5 +25,5 @@ util.o :
 create_tables: create_tables.o tpcc_util.o util.o
 	$(CC) $(CFLAGS) -o create_tables.exe $^
 
-load_tables: load_tables.o
+load_tables: load_tables.o util.o
 	$(CC) $(CFLAGS) -o load_tables.exe $^

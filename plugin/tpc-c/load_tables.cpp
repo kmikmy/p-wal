@@ -3,6 +3,9 @@
 #include <cstdio>
 #include <map>
 #include <string>
+#include <exception>
+#include "../../include/util.h"
+#include "../../include/cmdline.h"
 #include "include/tpcc.h"
 #include "include/tpcc_page.h"
 #include "include/debug.h"
@@ -13,17 +16,14 @@ typedef std::map<std::string, void(*)()> funcs_type;
 funcs_type funcs;
 
 void load_warehouse(){
-  int fd;
-  if((fd = open(WFILENAME, O_RDONLY, 0644)) == -1 ){
-    PERR("open");
-  }
+  FD fd;
+  std::vector<PageWarehouse> p(BUFSIZ);
 
-  PageWarehouse p[BUFSIZ];
+  fd.open(WFILENAME, O_RDONLY, 0644);
+
   while(1){
-    int rb = read(fd, p, sizeof(PageWarehouse)*BUFSIZ);
-    if(rb == -1){
-      PERR("read");
-    } else if(rb == 0){
+    int rb = fd.read(&p[0], sizeof(PageWarehouse)*BUFSIZ);
+    if(rb == 0){
       break;
     }
 
@@ -38,7 +38,7 @@ void load_warehouse(){
 		<< "w_state, "
 		<< "w_zip, "
 		<< "w_tax, "
-		<< "w_ytd" 
+		<< "w_ytd"
 		<< std::endl;
 
     for(int i=0;i<nrecord;i++){
@@ -60,17 +60,14 @@ void load_warehouse(){
 }
 
 void load_district(){
-  int fd;
-  if((fd = open(DFILENAME, O_RDONLY, 0644)) == -1 ){
-    PERR("open");
-  }
+  FD fd;
+  std::vector<PageDistrict> p(BUFSIZ);
 
-  PageDistrict p[BUFSIZ];
+  fd.open(DFILENAME, O_RDONLY, 0644);
+
   while(1){
-    int rb = read(fd, p, sizeof(PageDistrict)*BUFSIZ);
-    if(rb == -1){
-      PERR("read");
-    } else if(rb == 0){
+    int rb = fd.read(&p[0], sizeof(PageDistrict)*BUFSIZ);
+    if(rb == 0){
       break;
     }
 
@@ -86,7 +83,7 @@ void load_district(){
 		<< "d_state, "
 		<< "d_zip, "
 		<< "d_tax, "
-		<< "d_ytd, " 
+		<< "d_ytd, "
 		<< "d_next_o_id"
 		<< std::endl;
 
@@ -111,17 +108,14 @@ void load_district(){
 }
 
 void load_history(){
-  int fd;
-  if((fd = open(HFILENAME, O_RDONLY, 0644)) == -1 ){
-    PERR("open");
-  }
+  FD fd;
+  std::vector<PageHistory> p(BUFSIZ);
 
-  PageHistory p[BUFSIZ];
+  fd.open(HFILENAME, O_RDONLY, 0644);
+
   while(1){
-    int rb = read(fd, p, sizeof(PageHistory)*BUFSIZ);
-    if(rb == -1){
-      PERR("read");
-    } else if(rb == 0){
+    int rb = fd.read(&p[0], sizeof(PageHistory)*BUFSIZ);
+    if(rb == 0){
       break;
     }
 
@@ -154,17 +148,14 @@ void load_history(){
 }
 
 void load_new_order(){
-  int fd;
-  if((fd = open(NOFILENAME, O_RDONLY, 0644)) == -1 ){
-    PERR("open");
-  }
+  FD fd;
+  std::vector<PageNewOrder> p(BUFSIZ);
 
-  PageNewOrder p[BUFSIZ];
+  fd.open(NOFILENAME, O_RDONLY, 0644);
+
   while(1){
-    int rb = read(fd, p, sizeof(PageNewOrder)*BUFSIZ);
-    if(rb == -1){
-      PERR("read");
-    } else if(rb == 0){
+    int rb = fd.read(&p[0], sizeof(PageNewOrder)*BUFSIZ);
+    if(rb == 0){
       break;
     }
 
@@ -189,17 +180,14 @@ void load_new_order(){
 }
 
 void load_order(){
-  int fd;
-  if((fd = open(OFILENAME, O_RDONLY, 0644)) == -1 ){
-    PERR("open");
-  }
+  FD fd;
+  std::vector<PageOrder> p(BUFSIZ);
 
-  PageOrder p[BUFSIZ];
+  fd.open(OFILENAME, O_RDONLY, 0644);
+
   while(1){
-    int rb = read(fd, p, sizeof(PageOrder)*BUFSIZ);
-    if(rb == -1){
-      PERR("read");
-    } else if(rb == 0){
+    int rb = fd.read(&p[0], sizeof(PageOrder)*BUFSIZ);
+    if(rb == 0){
       break;
     }
 
@@ -233,17 +221,14 @@ void load_order(){
 }
 
 void load_order_line(){
-  int fd;
-  if((fd = open(OLFILENAME, O_RDONLY, 0644)) == -1 ){
-    PERR("open");
-  }
+  FD fd;
+  std::vector<PageOrderLine> p(BUFSIZ);
 
-  PageOrderLine p[BUFSIZ];
+  fd.open(OLFILENAME, O_RDONLY, 0644);
+
   while(1){
-    int rb = read(fd, p, sizeof(PageOrderLine)*BUFSIZ);
-    if(rb == -1){
-      PERR("read");
-    } else if(rb == 0){
+    int rb = fd.read(&p[0], sizeof(PageOrderLine)*BUFSIZ);
+    if(rb == 0){
       break;
     }
 
@@ -282,17 +267,14 @@ void load_order_line(){
 }
 
 void load_item(){
-  int fd;
-  if((fd = open(IFILENAME, O_RDONLY, 0644)) == -1 ){
-    PERR("open");
-  }
+  FD fd;
+  std::vector<PageItem> p(BUFSIZ);
 
-  PageItem p[BUFSIZ];
+  fd.open(IFILENAME, O_RDONLY, 0644);
+
   while(1){
-    int rb = read(fd, p, sizeof(PageItem)*BUFSIZ);
-    if(rb == -1){
-      PERR("read");
-    } else if(rb == 0){
+    int rb = fd.read(&p[0], sizeof(PageItem)*BUFSIZ);
+    if(rb == 0){
       break;
     }
 
@@ -321,17 +303,14 @@ void load_item(){
 }
 
 void load_stock(){
-  int fd;
-  if((fd = open(SFILENAME, O_RDONLY, 0644)) == -1 ){
-    PERR("open");
-  }
+  FD fd;
+  std::vector<PageStock> p(BUFSIZ);
 
-  PageStock p[BUFSIZ];
+  fd.open(SFILENAME, O_RDONLY, 0644);
+
   while(1){
-    int rb = read(fd, p, sizeof(PageStock)*BUFSIZ);
-    if(rb == -1){
-      PERR("read");
-    } else if(rb == 0){
+    int rb = fd.read(&p[0], sizeof(PageStock)*BUFSIZ);
+    if(rb == 0){
       break;
     }
 
@@ -384,17 +363,14 @@ void load_stock(){
 }
 
 void load_customer(){
-  int fd;
-  if((fd = open(CFILENAME, O_RDONLY, 0644)) == -1 ){
-    PERR("open");
-  }
+  FD fd;
+  std::vector<PageCustomer> p(BUFSIZ);
 
-  PageCustomer p[BUFSIZ];
+  fd.open(CFILENAME, O_RDONLY, 0644);
+
   while(1){
-    int rb = read(fd, p, sizeof(PageCustomer)*BUFSIZ);
-    if(rb == -1){
-      PERR("read");
-    } else if(rb == 0){
+    int rb = fd.read(&p[0], sizeof(PageCustomer)*BUFSIZ);
+    if(rb == 0){
       break;
     }
 
@@ -471,46 +447,57 @@ execute_cmd(std::string str){
   }
 }
 
-void
-all(){
-  funcs_type::iterator it;
-  for(it=funcs.begin(); it!=funcs.end(); it++){
-    it->second();
+void load_table(const std::string &tablename){
+  if(tablename.compare("warehouse") == 0){
+    load_warehouse();
+  } else if(tablename.compare("district") == 0){
+    load_district();
+  } else if(tablename.compare("history") == 0){
+    load_history();
+  } else if(tablename.compare("new-order") == 0){
+    load_new_order();
+  } else if(tablename.compare("order") == 0){
+    load_order();
+  } else if(tablename.compare("item") == 0){
+    load_item();
+  } else if(tablename.compare("stock") == 0){
+    load_stock();
+  } else if(tablename.compare("customer") == 0){
+    load_customer();
+  } else {
+    std::cerr << "tablename is invalid!" << std::endl;
   }
 }
 
-void
-register_func(){
-  funcs.insert(make_pair("warehouse", load_warehouse));
-  funcs.insert(make_pair("district", load_district));
-  funcs.insert(make_pair("history", load_history));
-  funcs.insert(make_pair("new_order", load_new_order));
-  funcs.insert(make_pair("order", load_order));
-  funcs.insert(make_pair("order_line", load_order_line));
-  funcs.insert(make_pair("item", load_item));
-  funcs.insert(make_pair("stock", load_stock));
-  funcs.insert(make_pair("customer", load_customer));
+void load_all(){
+  load_warehouse();
+  load_district();
+  load_history();
+  load_new_order();
+  load_order();
+  //  load_order_line();
+  load_item();
+  load_stock();
+  load_customer();
 }
 
 int
 main(int argc, char** argv) {
-  int result = 0;
-  std::string str;
+  cmdline::parser p;
 
-  register_func();
+  try{
+    //    p.add<T>("long option", 'short option', 'help message', 'must need?', 'default' , CustomReader)
+    p.add<std::string>("table", 't', "( warehouse | district | history | new-order | order | item | stock | customer )", false, "", cmdline::oneof<std::string>("warehouse", "district", "history", "new-order", "order", "item", "stock", "customer"));
+    p.add("help", 0, "print help");
 
-  while ((result = getopt(argc, argv, "t:")) != -1) {
-    switch(result){
-    case 't':
-      str = optarg;
-      printf("option %c applied with %s\n", result, str.c_str());
-      execute_cmd(str);
-      break;
-    case ':':   // no value applied
-      all();
-      break;
-    case '?':   // invalid option
-      exit(1);
+    p.parse_check(argc, argv);
+
+    if(p.exist("table")){
+      load_table(p.get<std::string>("table"));
+    } else {
+      load_all();
     }
+  } catch(std::exception e) {
+    std::cerr << e.what() << std::endl;
   }
 }
