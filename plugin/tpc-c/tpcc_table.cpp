@@ -1,6 +1,11 @@
 #include "include/tpcc.h"
+#include "include/tpcc_table.h"
 #include "../../include/ARIES.h"
 #include <cstdlib>
+
+extern uint64_t update(const char* table_name, const std::vector<QueryArg> &qs, uint32_t page_id, uint32_t xid, uint32_t thId);
+extern uint64_t insert(const char* table_name, const std::vector<QueryArg> &qs, uint32_t page_id, uint32_t xid, uint32_t thId);
+
 
 PageWarehouse *Warehouse::pages;
 PageDistrict *District::pages;
@@ -20,7 +25,6 @@ TPCC_PAGE_LIST *Warehouse::first_appended_page;
 TPCC_PAGE_LIST *Warehouse::last_appended_page;
 pthread_rwlock_t *Warehouse::locks;
 std::set<uint32_t> Warehouse::my_lock_table[32];
-
 uint32_t District::npage;
 uint32_t District::loaded_npage;
 uint32_t District::inserted_npage;
@@ -83,4 +87,3 @@ TPCC_PAGE_LIST *OrderLine::first_appended_page[MAX_WORKER_THREAD];
 TPCC_PAGE_LIST *OrderLine::last_appended_page[MAX_WORKER_THREAD];
 pthread_rwlock_t *OrderLine::locks;
 std::set<uint32_t> OrderLine::my_lock_table[32];
-

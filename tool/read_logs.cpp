@@ -94,7 +94,7 @@ DisplayLogRecordHeader(LogRecordHeader *log){
   cout << "Log[" << log->lsn << ":" << log->offset << "]: TransID=" << log->trans_id << ", file_id=" << log->file_id << ", Type=" << log->type;
 
   if(log->type != BEGIN && log->type != END)
-    cout << ", table_id=" << log->table_id <<", prev_lsn=" << log->prev_lsn << ", prev_offset=" << log->prev_offset << ", undo_nxt_lsn=" << log->undo_nxt_lsn << ", undo_nxt_offset=" << log->undo_nxt_offset << ", page_id=" << log->page_id << ", field_num=" << log->field_num;
+    cout << ", table_name=" << log->table_name <<", prev_lsn=" << log->prev_lsn << ", prev_offset=" << log->prev_offset << ", undo_nxt_lsn=" << log->undo_nxt_lsn << ", undo_nxt_offset=" << log->undo_nxt_offset << ", page_id=" << log->page_id << ", field_num=" << log->field_num;
   //<< ", before=" << log->before << ", after=" << log->after << ", op.op_type=" << log->op.op_type << ", op.amount=" << log-op.amount;
   cout << endl;
 }

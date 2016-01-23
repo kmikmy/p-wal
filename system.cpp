@@ -85,8 +85,8 @@ ARIES_SYSTEM::dbInit(int th_num)
   // 分散トランザクションテーブルの生成
   createDistTransTable(th_num);
   // tpc-c
-  //  tpcc_init();
-  //  tpcc_load();
+  tpcc_init();
+  tpcc_load();
 
   loadAllSchema();
 }
@@ -160,6 +160,3 @@ ARIES_SYSTEM::transtableDebug()
   // }
   cout << "+++++++++++++++++++++++++++++++++++++++++++++++++++" << endl;
 }
-
-
-

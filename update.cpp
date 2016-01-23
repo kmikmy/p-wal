@@ -1,5 +1,6 @@
 #include "include/ARIES.h"
 #include "include/schema.h"
+#include "plugin/tpc-c/include/tpcc_table.h"
 #include <memory>
 #include <iostream>
 #include <cstdlib>
@@ -27,7 +28,7 @@ extern char *ARIES_HOME;
 extern void pageFix(int page_id, int th_id);
 
 void WALUpdate(OP op, uint32_t xid, int page_id, int th_id);
-void update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_id, uint32_t xid, uint32_t thId);
+uint64_t update(const char* table_name, const std::vector<QueryArg> &qs, uint32_t page_id, uint32_t xid, uint32_t thId);
 void begin(uint32_t xid, int th_id);
 void end(uint32_t xid, int th_id);
 void rollback(uint32_t xid, int th_id);
@@ -138,18 +139,20 @@ updateOperations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int 
       //      WAL_update(op, xid, page_id, th_id);
       char fname[10] = "val";
       int  flen      = strlen(fname) + 1;
-      int update_field_num = 1;
 
       std::unique_ptr<int> before_ptr(new int(page_table[page_id].page.value));
       std::unique_ptr<int> after_ptr(new int(rand()%100));
       std::unique_ptr<char[]> field_name_ptr(new char[flen]);
 
+      std::vector<QueryArg> qs(1);
       QueryArg q;
       q.before = (char *)before_ptr.get();
       q.after = (char *)after_ptr.get();
       q.field_name = field_name_ptr.get();
       memcpy(q.field_name, fname, flen);
-      update("simple", &q, update_field_num, page_id, xid , th_id);
+      qs[0] = q;
+
+      update("simple", qs, page_id, xid , th_id);
     }
   }
 #ifndef READ_MODE
@@ -235,7 +238,6 @@ begin(uint32_t xid, int th_id=0)
   dist_trans_table[th_id].LastLSN = log.lsn;
   dist_trans_table[th_id].LastOffset = log.offset;
   dist_trans_table[th_id].UndoNxtLSN = log.lsn; /* BEGIN レコードは END レコードによってコンペンセーションされる. */
-  dist_trans_table[th_id].LastOffset = log.offset;
 
 
 #ifdef DEBUG
@@ -268,12 +270,12 @@ end(uint32_t xid, int th_id=0)
 #endif
 }
 
-void
-update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_id, uint32_t xid, uint32_t thId)
+uint64_t
+update(const char* table_name, const std::vector<QueryArg> &qs, uint32_t page_id, uint32_t xid, uint32_t thId)
 {
   Log log;
   size_t total_field_length=0;
-  std::vector<FieldLogList> p(update_field_num);
+  std::vector<FieldLogList> field_logs(qs.size());
   TableSchema *tableSchema = MasterSchema::getTableSchemaPtr(table_name);
 
   if(tableSchema->pageSize == 0){ cout << "the table is not defined: " << table_name << endl; exit(1);}
@@ -292,29 +294,90 @@ update(const char* table_name, QueryArg *q, int update_field_num, uint32_t page_
   log.undo_nxt_offset = 0;
 
   /* 以下からTPC-C用に適用したフィールド */
+  if(strcmp(table_name, "") == 0){
+    PERR("table_name is null");
+  }
+
   strncpy(log.table_name, table_name, strlen(table_name)+1);
-  log.field_num = update_field_num;
+  log.field_num = qs.size();
 
-  for(int i=0;i < update_field_num;i++, q = q->nxt){
-    if(i > 0){
-      p[i-1].nxt = &p[i];
-    }
-
-    FieldInfo finfo = tableSchema->getFieldInfo(q->field_name);
-    p[i].field_offset = finfo.offset;
-    p[i].field_length = finfo.length;
-    p[i].before = q->before;
-    p[i].after = q->after;
-    p[i].nxt = NULL;
+  int i=0;
+  for(auto q: qs){
+    FieldInfo finfo = tableSchema->getFieldInfo(q.field_name);
+    field_logs[i].field_offset = finfo.offset;
+    field_logs[i].field_length = finfo.length;
+    field_logs[i].before = q.before;
+    field_logs[i].after = q.after;
 
     total_field_length += sizeof(size_t)*2 + finfo.length*2;
+    ++i;
   }
 
   log.total_field_length = total_field_length;
   log.total_length = total_field_length + sizeof(LogRecordHeader);
 
-  Logger::logWrite(&log, p, thId);
+  Logger::logWrite(&log, field_logs, thId);
+
+  dist_trans_table[thId].LastLSN = log.lsn;
+  dist_trans_table[thId].LastOffset = log.offset;
+  dist_trans_table[thId].UndoNxtLSN = log.lsn;  // undoできる非CLRレコードの場合はundo_nxt_lsnはLastLSNと同じになる
+  dist_trans_table[thId].UndoNxtOffset = log.offset;
+
+  return log.lsn;
 }
+
+uint64_t
+insert(const char* table_name, const std::vector<QueryArg> &qs, uint32_t page_id, uint32_t xid, uint32_t thId)
+{
+  Log log;
+  size_t total_field_length=0;
+  std::vector<FieldLogList> field_logs(qs.size());
+  TableSchema *tableSchema = MasterSchema::getTableSchemaPtr(table_name);
+
+  if(tableSchema->pageSize == 0){ cout << "the table is not defined: " << table_name << endl; exit(1);}
+
+  //  lock()を取りたい． <- 不明(2015/09/28)
+
+  memset(&log,0,sizeof(log));
+  //   LSNはログを書き込む直前に決定する
+  log.trans_id = xid;
+  log.type = INSERT;
+  log.page_id = page_id;
+
+  log.prev_lsn = dist_trans_table[thId].LastLSN;;
+  log.prev_offset = dist_trans_table[thId].LastOffset;
+  log.undo_nxt_lsn = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
+  log.undo_nxt_offset = 0;
+
+  /* 以下からTPC-C用に適用したフィールド */
+  strncpy(log.table_name, table_name, strlen(table_name)+1);
+  log.field_num = qs.size();
+
+  int i=0;
+  for(auto q: qs){
+    FieldInfo finfo = tableSchema->getFieldInfo(q.field_name);
+    field_logs[i].field_offset = finfo.offset;
+    field_logs[i].field_length = finfo.length;
+    field_logs[i].before = q.before;
+    field_logs[i].after = q.after;
+
+    total_field_length += sizeof(size_t)*2 + finfo.length*2;
+    ++i;
+  }
+
+  log.total_field_length = total_field_length;
+  log.total_length = total_field_length + sizeof(LogRecordHeader);
+
+  Logger::logWrite(&log, field_logs, thId);
+
+  dist_trans_table[thId].LastLSN = log.lsn;
+  dist_trans_table[thId].LastOffset = log.offset;
+  dist_trans_table[thId].UndoNxtLSN = log.lsn;  // undoできる非CLRレコードの場合はundo_nxt_lsnはLastLSNと同じになる
+  dist_trans_table[thId].UndoNxtOffset = log.offset;
+
+  return log.lsn;
+}
+
 
 /*
   rollback()内ではトランザクションテーブルからエントリを削除しない.
@@ -363,48 +426,38 @@ rollback(uint32_t xid, int th_id)
       int idx=log.page_id;
 
       if(log.type == UPDATE){
-	switch((kTableType)log.table_id){
-	case SIMPLE:
+	if(strncmp(log.table_name, "simple", sizeof(log.table_name)-1 ) == 0){
 	  //	  page_table[idx].page.value = log.before;
 	  page_table[idx].page.page_LSN = log.prev_lsn;
-	  break;
-	case WAREHOUSE:
+	} else if(strncmp(log.table_name, "warehouse", sizeof(log.table_name)-1 ) == 0){
 	  //	  memcpy(&Warehouse::pages[idx-1], log.padding, sizeof(PageWarehouse));
-	  //  Warehouse::pages[idx-1].page_LSN = log.prev_lsn;
-	  break;
-	case DISTRICT:
+	  Warehouse::pages[idx-1].page_LSN = log.prev_lsn;
+	} else if(strncmp(log.table_name, "district", sizeof(log.table_name)-1 ) == 0){
 	  //	  memcpy(&District::pages[idx-1], log.padding, sizeof(PageDistrict));
-	  //	  District::pages[idx-1].page_LSN = log.prev_lsn;
-	  break;
-	case CUSTOMER:
+	  District::pages[idx-1].page_LSN = log.prev_lsn;
+	} else if(strncmp(log.table_name, "customer", sizeof(log.table_name)-1 ) == 0){
 	  //	  memcpy(&Customer::pages[idx-1], log.padding, sizeof(PageCustomer));
-	  //	  Customer::pages[idx-1].page_LSN = log.prev_lsn;
-	  break;
-	case HISTORY:
+	  Customer::pages[idx-1].page_LSN = log.prev_lsn;
+	} else if(strncmp(log.table_name, "history", sizeof(log.table_name)-1 ) == 0){
 	  /* not defined */
-	  break;
-	case ORDER:
+	} else if(strncmp(log.table_name, "order", sizeof(log.table_name)-1 ) == 0){
 	  // memcpy(&Order::pages[idx-1], log.padding, sizeof(PageOrder));
-	  //	  Order::pages[idx-1].page_LSN = log.prev_lsn;
-	  break;
-	case ORDERLINE:
+	  Order::pages[idx-1].page_LSN = log.prev_lsn;
+	} else if(strncmp(log.table_name, "order_line", sizeof(log.table_name)-1 ) == 0){
 	  // memcpy(&OrderLine::pages[idx-1], log.padding, sizeof(PageOrderLine));
-	  //	  OrderLine::pages[idx-1].page_LSN = log.prev_lsn;
-	  break;
-	case NEWORDER:
+	  OrderLine::pages[idx-1].page_LSN = log.prev_lsn;
+	} else if(strncmp(log.table_name, "new_order", sizeof(log.table_name)-1 ) == 0){
 	  // memcpy(&NewOrder::pages[idx-1], log.padding, sizeof(PageNewOrder));
-	  //	  NewOrder::pages[idx-1].page_LSN = log.prev_lsn;
-	  break;
-	case ITEM:
+	  NewOrder::pages[idx-1].page_LSN = log.prev_lsn;
+	} else if(strncmp(log.table_name, "item", sizeof(log.table_name)-1 ) == 0){
 	  //	  memcpy(&Item::pages[idx-1], log.padding, sizeof(PageItem));
-	  //	  Item::pages[idx-1].page_LSN = log.prev_lsn;
-	  break;
-	case STOCK:
+	  Item::pages[idx-1].page_LSN = log.prev_lsn;
+	} else if(strncmp(log.table_name, "stock", sizeof(log.table_name)-1 ) == 0){
 	  //	  memcpy(&Stock::pages[idx-1], log.padding, sizeof(PageStock));
-	  //	  Stock::pages[idx-1].page_LSN = log.prev_lsn;
-	  break;
-	default:
-	  PERR("switch");
+	  Stock::pages[idx-1].page_LSN = log.prev_lsn;
+	} else {
+	  cout << log.table_name << endl;
+	  PERR("table name info is broken.");
 	}
       } if(log.type == INSERT){
 	switch((int)log.table_id){
@@ -420,13 +473,13 @@ rollback(uint32_t xid, int th_id)
 	  /* not defined */
 	  break;
 	case ORDER:
-	  //	  Order::pages[idx-1].delete_flag = true;
+	  Order::pages[idx-1].delete_flag = true;
 	  break;
 	case ORDERLINE:
-	  //	  OrderLine::pages[idx-1].delete_flag = true;
+	  OrderLine::pages[idx-1].delete_flag = true;
 	  break;
 	case NEWORDER:
-	  //	  NewOrder::pages[idx-1].delete_flag = true;
+	  NewOrder::pages[idx-1].delete_flag = true;
 	  break;
 	case ITEM:
 	  break;

@@ -3,6 +3,7 @@
 
 #include <pthread.h>
 #include <iostream>
+#include <memory>
 #include "tpcc.h"
 #include "tpcc_page.h"
 #include "../../../include/log.h"
@@ -13,6 +14,10 @@
 /* #endif */
 
 extern DistributedTransTable *dist_trans_table;
+
+extern uint64_t update(const char* table_name, const std::vector<QueryArg> &qs, uint32_t page_id, uint32_t xid, uint32_t thId);
+extern uint64_t insert(const char* table_name, const std::vector<QueryArg> &qs, uint32_t page_id, uint32_t xid, uint32_t thId);
+
 
 class Table{
 };
@@ -214,48 +219,29 @@ class District : public Table{
   }
 
   static int
-  update1(uint32_t d_next_o_id, PageDistrict* page, uint32_t thId, uint32_t xid){
+    update1(uint32_t d_next_o_id, PageDistrict* page, uint32_t thId, uint32_t xid){
     if(page == NULL)
       return 1;
     lock_page(page->page_id, thId);
-    PageDistrict after;
-    memcpy(&after, page, sizeof(PageDistrict));
-    after.d_next_o_id = d_next_o_id;
-    page->page_LSN = wal_write(xid, page, &after, thId);
+
+    char fname[BUFSIZ] = "d_next_o_id";
+    int  flen      = strlen(fname) + 1;
+
+    std::unique_ptr<uint32_t> before_ptr(new uint32_t(page->d_next_o_id));
+    std::unique_ptr<uint32_t> after_ptr(new uint32_t(d_next_o_id));
+    std::unique_ptr<char[]> field_name_ptr(new char[flen]);
+
+    std::vector<QueryArg> qs(1);
+    QueryArg q;
+    q.before = (char *)before_ptr.get();
+    q.after = (char *)after_ptr.get();
+    q.field_name = field_name_ptr.get();
+    memcpy(q.field_name, fname, flen);
+    qs[0] = q;
+
+    page->page_LSN = ::update("district", qs, page->page_id, xid, thId);
     page->d_next_o_id = d_next_o_id;
     return 0;
-  }
-
-  static uint64_t
-  wal_write(uint32_t xid, FieldLogList *field_log_list, uint32_t thId){
-    Log log;
-    //   LSNはログを書き込む直前に決定する
-    log.trans_id = xid;
-    if(before != NULL){
-      log.type = UPDATE;
-    } else {
-      log.type = INSERT;
-    }
-    log.page_id = after->page_id;
-    log.table_id = DISTRICT;
-    log.prev_lsn = dist_trans_table[thId].LastLSN;
-    log.prev_offset = dist_trans_table[thId].LastOffset;
-    log.undo_nxt_lsn = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
-    log.undo_nxt_offset = 0;
-
-    if(before != NULL){
-      memcpy(log.padding, before, sizeof(PageDistrict));
-    }
-    memcpy(log.padding+sizeof(PageDistrict), after, sizeof(PageDistrict));
-
-    Logger::log_write(&log, thId);
-
-    dist_trans_table[thId].LastLSN = log.LSN;
-    dist_trans_table[thId].LastOffset = log.Offset;
-    dist_trans_table[thId].undo_nxt_lsn = log.LSN; // undoできる非CLRレコードの場合はundo_nxt_lsnはLastLSNと同じになる
-    dist_trans_table[thId].undo_nxt_offset = log.Offset;
-
-    return log.LSN;
   }
 };
 
@@ -422,46 +408,53 @@ public:
   }
 
   static void
-    insert1(PageNewOrder &_nop, int thId, uint32_t xid){
+  insert1(PageNewOrder &nop, int thId, uint32_t xid){
     TPCC_PAGE_LIST *plist = (TPCC_PAGE_LIST *)calloc(1, sizeof(TPCC_PAGE_LIST));
-    PageNewOrder *nop = (PageNewOrder *)calloc(1, sizeof(PageNewOrder));
-    memcpy(nop, &_nop, sizeof(PageNewOrder));
-    plist->page = nop;
+    PageNewOrder *page = (PageNewOrder *)calloc(1, sizeof(PageNewOrder));
+    memcpy(page, &nop, sizeof(PageNewOrder));
+    plist->page = page;
+
+    char fname[BUFSIZ];
+    int  flen;
+    QueryArg q;
+    std::vector<QueryArg> qs(3);
+
+    strcpy(fname, "no_o_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr1(new uint32_t(nop.no_o_id));
+    std::unique_ptr<uint32_t> after_ptr1(new uint32_t(nop.no_o_id));
+    std::unique_ptr<char[]> field_name_ptr1(new char[flen]);
+    q.before = (char *)before_ptr1.get();
+    q.after = (char *)after_ptr1.get();
+    q.field_name = field_name_ptr1.get();
+    memcpy(q.field_name, fname, flen);
+    qs[0] = q;
+
+    strcpy(fname, "no_d_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr2(new uint32_t(nop.no_o_id));
+    std::unique_ptr<uint32_t> after_ptr2(new uint32_t(nop.no_o_id));
+    std::unique_ptr<char[]> field_name_ptr2(new char[flen]);
+    q.before = (char *)before_ptr2.get();
+    q.after = (char *)after_ptr2.get();
+    q.field_name = field_name_ptr2.get();
+    memcpy(q.field_name, fname, flen);
+    qs[1] = q;
+
+    strcpy(fname, "no_w_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr3(new uint32_t(nop.no_o_id));
+    std::unique_ptr<uint32_t> after_ptr3(new uint32_t(nop.no_o_id));
+    std::unique_ptr<char[]> field_name_ptr3(new char[flen]);
+    q.before = (char *)before_ptr3.get();
+    q.after = (char *)after_ptr3.get();
+    q.field_name = field_name_ptr3.get();
+    memcpy(q.field_name, fname, flen);
+    qs[2] = q;
+
+    page->page_LSN = ::insert("new_order", qs, page->page_id, xid, thId);
+
     insert_list(plist,thId);
-    nop->page_LSN = wal_write(xid, NULL, (PageNewOrder *)plist->page, thId);
-  }
-
-  static uint64_t
-  wal_write(uint32_t xid, PageNewOrder *before, PageNewOrder *after, int thId){
-    Log log;
-
-    //   LSNはログを書き込む直前に決定する
-    log.trans_id = xid;
-    if(before != NULL){
-      log.type = UPDATE;
-    } else {
-      log.type = INSERT;
-    }
-    log.page_id = after->page_id;
-    log.table_id = NEWORDER;
-    log.prev_lsn = dist_trans_table[thId].LastLSN;
-    log.prev_offset = dist_trans_table[thId].LastOffset;
-    log.undo_nxt_lsn = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
-    log.undo_nxt_offset = 0;
-
-    if(before != NULL){
-      memcpy(log.padding, before, sizeof(PageNewOrder));
-    }
-    memcpy(log.padding+sizeof(PageNewOrder), after, sizeof(PageNewOrder));
-
-    Logger::log_write(&log, thId);
-
-    dist_trans_table[thId].LastLSN = log.LSN;
-    dist_trans_table[thId].LastOffset = log.Offset;
-    dist_trans_table[thId].undo_nxt_lsn = log.LSN; // undoできる非CLRレコードの場合はundo_nxt_lsnはLastLSNと同じになる
-    dist_trans_table[thId].undo_nxt_offset = log.Offset;
-
-    return log.LSN;
   }
 };
 
@@ -530,47 +523,111 @@ public:
   }
 
   static void
-  insert1(PageOrder &_op, int thId, int xid){
+  insert1(PageOrder &op, int thId, int xid){
     TPCC_PAGE_LIST *plist = (TPCC_PAGE_LIST *)calloc(1, sizeof(TPCC_PAGE_LIST));
-    PageNewOrder *op = (PageNewOrder *)calloc(1, sizeof(PageOrder));
-    memcpy(op, &_op, sizeof(PageOrder));
-    plist->page = op;
+    PageOrder *page = (PageOrder *)calloc(1, sizeof(PageOrder));
+    memcpy(page, &op, sizeof(PageOrder));
+    plist->page = page;
+
+    char fname[BUFSIZ];
+    int  flen;
+    QueryArg q;
+    std::vector<QueryArg> qs(8);
+
+    strcpy(fname, "o_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr0(new uint32_t(op.o_id));
+    std::unique_ptr<uint32_t> after_ptr0(new uint32_t(op.o_id));
+    std::unique_ptr<char[]> field_name_ptr0(new char[flen]);
+    q.before = (char *)before_ptr0.get();
+    q.after = (char *)after_ptr0.get();
+    q.field_name = field_name_ptr0.get();
+    memcpy(q.field_name, fname, flen);
+    qs[0] = q;
+
+    strcpy(fname, "o_d_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr1(new uint32_t(op.o_d_id));
+    std::unique_ptr<uint32_t> after_ptr1(new uint32_t(op.o_d_id));
+    std::unique_ptr<char[]> field_name_ptr1(new char[flen]);
+    q.before = (char *)before_ptr1.get();
+    q.after = (char *)after_ptr1.get();
+    q.field_name = field_name_ptr1.get();
+    memcpy(q.field_name, fname, flen);
+    qs[1] = q;
+
+    strcpy(fname, "o_w_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr2(new uint32_t(op.o_w_id));
+    std::unique_ptr<uint32_t> after_ptr2(new uint32_t(op.o_w_id));
+    std::unique_ptr<char[]> field_name_ptr2(new char[flen]);
+    q.before = (char *)before_ptr2.get();
+    q.after = (char *)after_ptr2.get();
+    q.field_name = field_name_ptr2.get();
+    memcpy(q.field_name, fname, flen);
+    qs[2] = q;
+
+    strcpy(fname, "o_c_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr3(new uint32_t(op.o_c_id));
+    std::unique_ptr<uint32_t> after_ptr3(new uint32_t(op.o_c_id));
+    std::unique_ptr<char[]> field_name_ptr3(new char[flen]);
+    q.before = (char *)before_ptr3.get();
+    q.after = (char *)after_ptr3.get();
+    q.field_name = field_name_ptr3.get();
+    memcpy(q.field_name, fname, flen);
+    qs[3] = q;
+
+    strcpy(fname, "o_entry_d");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<char[]> before_ptr4(new char[32]);
+    strncpy(before_ptr4.get(), op.o_entry_d, sizeof(op.o_entry_d)-1);
+    std::unique_ptr<char[]> after_ptr4(new char[32]);
+    strncpy(after_ptr4.get(), op.o_entry_d, sizeof(op.o_entry_d)-1);
+    std::unique_ptr<char[]> field_name_ptr4(new char[flen]);
+    q.before = (char *)before_ptr4.get();
+    q.after = (char *)after_ptr4.get();
+    q.field_name = field_name_ptr4.get();
+    memcpy(q.field_name, fname, flen);
+    qs[4] = q;
+
+    strcpy(fname, "o_carrier_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr5(new uint32_t(op.o_carrier_id));
+    std::unique_ptr<uint32_t> after_ptr5(new uint32_t(op.o_carrier_id));
+    std::unique_ptr<char[]> field_name_ptr5(new char[flen]);
+    q.before = (char *)before_ptr5.get();
+    q.after = (char *)after_ptr5.get();
+    q.field_name = field_name_ptr5.get();
+    memcpy(q.field_name, fname, flen);
+    qs[5] = q;
+
+    strcpy(fname, "o_ol_cnt");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr6(new uint32_t(op.o_ol_cnt));
+    std::unique_ptr<uint32_t> after_ptr6(new uint32_t(op.o_ol_cnt));
+    std::unique_ptr<char[]> field_name_ptr6(new char[flen]);
+    q.before = (char *)before_ptr6.get();
+    q.after = (char *)after_ptr6.get();
+    q.field_name = field_name_ptr6.get();
+    memcpy(q.field_name, fname, flen);
+    qs[6] = q;
+
+    strcpy(fname, "o_all_local");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr7(new uint32_t(op.o_all_local));
+    std::unique_ptr<uint32_t> after_ptr7(new uint32_t(op.o_all_local));
+    std::unique_ptr<char[]> field_name_ptr7(new char[flen]);
+    q.before = (char *)before_ptr7.get();
+    q.after = (char *)after_ptr7.get();
+    q.field_name = field_name_ptr7.get();
+    memcpy(q.field_name, fname, flen);
+    qs[7] = q;
+
+    page->page_LSN = ::insert("order", qs, page->page_id, xid, thId);
+
     insert_list(plist,thId);
-    op->page_LSN = wal_write(xid, NULL, (PageOrder *)plist->page, thId);
   }
-
-  static uint64_t
-  wal_write(uint32_t xid, PageOrder *before, PageOrder *after, int thId){
-    Log log;
-    //   LSNはログを書き込む直前に決定する
-    log.trans_id = xid;
-    if(before != NULL){
-      log.type = UPDATE;
-    } else {
-      log.type = INSERT;
-    }
-    log.page_id = after->page_id;
-    log.table_id = ORDER;
-    log.prev_lsn = dist_trans_table[thId].LastLSN;
-    log.prev_offset = dist_trans_table[thId].LastOffset;
-    log.undo_nxt_lsn = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
-    log.undo_nxt_offset = 0;
-
-    if(before != NULL){
-      memcpy(log.padding, before, sizeof(PageOrder));
-    }
-    memcpy(log.padding+sizeof(PageOrder), after, sizeof(PageOrder));
-
-    Logger::log_write(&log, thId);
-
-    dist_trans_table[thId].LastLSN = log.LSN;
-    dist_trans_table[thId].LastOffset = log.Offset;
-    dist_trans_table[thId].undo_nxt_lsn = log.LSN; // undoできる非CLRレコードの場合はundo_nxt_lsnはLastLSNと同じになる
-    dist_trans_table[thId].undo_nxt_offset = log.Offset;
-
-    return log.LSN;
-  }
-
 };
 
 class Item : public Table{
@@ -767,52 +824,70 @@ class Stock : public Table{
   }
 
   static int
-    update1(uint32_t s_quantity, uint32_t s_ytd, uint32_t s_order_cnt, uint32_t s_remote_cnt, PageStock *page, int thId, uint32_t xid){
+  update1(uint32_t s_quantity, uint32_t s_ytd, uint32_t s_order_cnt, uint32_t s_remote_cnt, PageStock *page, int thId, uint32_t xid){
     if(page == NULL){
       std::cout << "page is NULL" << std::endl;
       return 1;
     }
     lock_page(page->page_id, thId);
-    PageStock before;
-    memcpy(&before, page, sizeof(PageStock));
+
+    char fname[BUFSIZ];
+    int  flen;
+    QueryArg q;
+    std::vector<QueryArg> qs(4);
+
+    strcpy(fname, "s_quantity");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr0(new uint32_t(s_quantity));
+    std::unique_ptr<uint32_t> after_ptr0(new uint32_t(s_quantity));
+    std::unique_ptr<char[]> field_name_ptr0(new char[flen]);
+    q.before = (char *)before_ptr0.get();
+    q.after = (char *)after_ptr0.get();
+    q.field_name = field_name_ptr0.get();
+    memcpy(q.field_name, fname, flen);
+    qs[0] = q;
+
+    strcpy(fname, "s_ytd");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr1(new uint32_t(s_ytd));
+    std::unique_ptr<uint32_t> after_ptr1(new uint32_t(s_ytd));
+    std::unique_ptr<char[]> field_name_ptr1(new char[flen]);
+    q.before = (char *)before_ptr1.get();
+    q.after = (char *)after_ptr1.get();
+    q.field_name = field_name_ptr1.get();
+    memcpy(q.field_name, fname, flen);
+    qs[1] = q;
+
+    strcpy(fname, "s_order_cnt");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr2(new uint32_t(s_order_cnt));
+    std::unique_ptr<uint32_t> after_ptr2(new uint32_t(s_order_cnt));
+    std::unique_ptr<char[]> field_name_ptr2(new char[flen]);
+    q.before = (char *)before_ptr2.get();
+    q.after = (char *)after_ptr2.get();
+    q.field_name = field_name_ptr2.get();
+    memcpy(q.field_name, fname, flen);
+    qs[2] = q;
+
+    strcpy(fname, "s_remote_cnt");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr3(new uint32_t(s_remote_cnt));
+    std::unique_ptr<uint32_t> after_ptr3(new uint32_t(s_remote_cnt));
+    std::unique_ptr<char[]> field_name_ptr3(new char[flen]);
+    q.before = (char *)before_ptr3.get();
+    q.after = (char *)after_ptr3.get();
+    q.field_name = field_name_ptr3.get();
+    memcpy(q.field_name, fname, flen);
+    qs[3] = q;
+
+    page->page_LSN = update("stock", qs, page->page_id, xid, thId);
+
     page->s_quantity = s_quantity;
     page->s_ytd = s_ytd;
     page->s_order_cnt = s_order_cnt;
     page->s_remote_cnt = s_remote_cnt;
-    page->page_LSN = wal_write(xid, &before, page, thId);
+
     return 0;
-  }
-
-  static uint64_t
-  wal_write(uint32_t xid, PageStock *before, PageStock *after, int thId){
-    Log log;
-    //   LSNはログを書き込む直前に決定する
-    log.trans_id = xid;
-    if(before != NULL){
-      log.type = UPDATE;
-    } else {
-      log.type = INSERT;
-    }
-    log.page_id = after->page_id;
-    log.table_id = STOCK;
-    log.prev_lsn = dist_trans_table[thId].LastLSN;
-    log.prev_offset = dist_trans_table[thId].LastOffset;
-    log.undo_nxt_lsn = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
-    log.undo_nxt_offset = 0;
-
-    if(before != NULL){
-      memcpy(log.padding, before, sizeof(PageStock));
-    }
-    memcpy(log.padding+sizeof(PageStock), after, sizeof(PageStock));
-
-    Logger::log_write(&log, thId);
-
-    dist_trans_table[thId].LastLSN = log.LSN;
-    dist_trans_table[thId].LastOffset = log.Offset;
-    dist_trans_table[thId].undo_nxt_lsn = log.LSN; // undoできる非CLRレコードの場合はundo_nxt_lsnはLastLSNと同じになる
-    dist_trans_table[thId].undo_nxt_offset = log.Offset;
-
-    return log.LSN;
   }
 };
 
@@ -880,45 +955,134 @@ class OrderLine : public Table{
   }
 
   static void
-    insert1(PageOrderLine &_olp, int thId, int xid){
+  insert1(PageOrderLine &olp, int thId, int xid){
     TPCC_PAGE_LIST *plist = (TPCC_PAGE_LIST *)calloc(1, sizeof(TPCC_PAGE_LIST));
-    PageNewOrder *olp = (PageNewOrder *)calloc(1, sizeof(PageOrderLine));
-    memcpy(olp, &_olp, sizeof(PageOrder));
-    plist->page = olp;
-    insert_list(plist, thId);
-    olp->page_LSN = wal_write(xid, NULL, (PageOrderLine *)plist->page, thId);
-  }
+    PageOrderLine *page = (PageOrderLine *)calloc(1, sizeof(PageOrderLine));
+    memcpy(page, &olp, sizeof(PageOrderLine));
+    plist->page = page;
 
-  static uint64_t
-  wal_write(uint32_t xid, PageOrderLine *before, PageOrderLine *after, int thId){
-    Log log;
-    //   LSNはログを書き込む直前に決定する
-    log.trans_id = xid;
-    if(before != NULL){
-      log.type = UPDATE;
-    } else {
-      log.type = INSERT;
-    }
-    log.page_id = after->page_id;
-    log.table_id = ORDERLINE;
-    log.prev_lsn = dist_trans_table[thId].LastLSN;
-    log.prev_offset = dist_trans_table[thId].LastOffset;
-    log.undo_nxt_lsn = 0; // UndoNextLSNがログに書かれるのはCLRのみ.
-    log.undo_nxt_offset = 0;
+    char fname[BUFSIZ];
+    int  flen;
+    QueryArg q;
+    std::vector<QueryArg> qs(10);
 
-    if(before != NULL){
-      memcpy(log.padding, before, sizeof(PageOrderLine));
-    }
-    memcpy(log.padding+sizeof(PageOrderLine), after, sizeof(PageOrderLine));
+    strcpy(fname, "ol_o_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr0(new uint32_t(olp.ol_o_id));
+    std::unique_ptr<uint32_t> after_ptr0(new uint32_t(olp.ol_o_id));
+    std::unique_ptr<char[]> field_name_ptr0(new char[flen]);
+    q.before = (char *)before_ptr0.get();
+    q.after = (char *)after_ptr0.get();
+    q.field_name = field_name_ptr0.get();
+    memcpy(q.field_name, fname, flen);
+    qs[0] = q;
 
-    Logger::log_write(&log, thId);
+    strcpy(fname, "ol_d_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr1(new uint32_t(olp.ol_d_id));
+    std::unique_ptr<uint32_t> after_ptr1(new uint32_t(olp.ol_d_id));
+    std::unique_ptr<char[]> field_name_ptr1(new char[flen]);
+    q.before = (char *)before_ptr1.get();
+    q.after = (char *)after_ptr1.get();
+    q.field_name = field_name_ptr1.get();
+    memcpy(q.field_name, fname, flen);
+    qs[1] = q;
 
-    dist_trans_table[thId].LastLSN = log.LSN;
-    dist_trans_table[thId].LastOffset = log.Offset;
-    dist_trans_table[thId].undo_nxt_lsn = log.LSN; // undoできる非CLRレコードの場合はundo_nxt_lsnはLastLSNと同じになる
-    dist_trans_table[thId].undo_nxt_offset = log.Offset;
+    strcpy(fname, "ol_w_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr2(new uint32_t(olp.ol_w_id));
+    std::unique_ptr<uint32_t> after_ptr2(new uint32_t(olp.ol_w_id));
+    std::unique_ptr<char[]> field_name_ptr2(new char[flen]);
+    q.before = (char *)before_ptr2.get();
+    q.after = (char *)after_ptr2.get();
+    q.field_name = field_name_ptr2.get();
+    memcpy(q.field_name, fname, flen);
+    qs[2] = q;
 
-    return log.LSN;
+    strcpy(fname, "ol_number");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr3(new uint32_t(olp.ol_number));
+    std::unique_ptr<uint32_t> after_ptr3(new uint32_t(olp.ol_number));
+    std::unique_ptr<char[]> field_name_ptr3(new char[flen]);
+    q.before = (char *)before_ptr3.get();
+    q.after = (char *)after_ptr3.get();
+    q.field_name = field_name_ptr3.get();
+    memcpy(q.field_name, fname, flen);
+    qs[3] = q;
+
+    strcpy(fname, "ol_i_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr4(new uint32_t(olp.ol_i_id));
+    std::unique_ptr<uint32_t> after_ptr4(new uint32_t(olp.ol_i_id));
+    std::unique_ptr<char[]> field_name_ptr4(new char[flen]);
+    q.before = (char *)before_ptr4.get();
+    q.after = (char *)after_ptr4.get();
+    q.field_name = field_name_ptr4.get();
+    memcpy(q.field_name, fname, flen);
+    qs[4] = q;
+
+    strcpy(fname, "ol_supply_w_id");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr5(new uint32_t(olp.ol_supply_w_id));
+    std::unique_ptr<uint32_t> after_ptr5(new uint32_t(olp.ol_supply_w_id));
+    std::unique_ptr<char[]> field_name_ptr5(new char[flen]);
+    q.before = (char *)before_ptr5.get();
+    q.after = (char *)after_ptr5.get();
+    q.field_name = field_name_ptr5.get();
+    memcpy(q.field_name, fname, flen);
+    qs[5] = q;
+
+    strcpy(fname, "ol_delivery_d");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<char[]> before_ptr6(new char[20]);
+    strncpy(before_ptr6.get(), olp.ol_delivery_d, sizeof(olp.ol_delivery_d)-1);
+    std::unique_ptr<char[]> after_ptr6(new char[20]);
+    strncpy(after_ptr6.get(), olp.ol_delivery_d, sizeof(olp.ol_delivery_d)-1);
+    std::unique_ptr<char[]> field_name_ptr6(new char[flen]);
+    q.before = (char *)before_ptr6.get();
+    q.after = (char *)after_ptr6.get();
+    q.field_name = field_name_ptr6.get();
+    memcpy(q.field_name, fname, flen);
+    qs[6] = q;
+
+    strcpy(fname, "ol_quantity");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<uint32_t> before_ptr7(new uint32_t(olp.ol_quantity));
+    std::unique_ptr<uint32_t> after_ptr7(new uint32_t(olp.ol_quantity));
+    std::unique_ptr<char[]> field_name_ptr7(new char[flen]);
+    q.before = (char *)before_ptr7.get();
+    q.after = (char *)after_ptr7.get();
+    q.field_name = field_name_ptr7.get();
+    memcpy(q.field_name, fname, flen);
+    qs[7] = q;
+
+    strcpy(fname, "ol_amount");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<double> before_ptr8(new double(olp.ol_amount));
+    std::unique_ptr<double> after_ptr8(new double(olp.ol_amount));
+    std::unique_ptr<char[]> field_name_ptr8(new char[flen]);
+    q.before = (char *)before_ptr8.get();
+    q.after = (char *)after_ptr8.get();
+    q.field_name = field_name_ptr8.get();
+    memcpy(q.field_name, fname, flen);
+    qs[8] = q;
+
+    strcpy(fname, "ol_dist_info");
+    flen = strlen(fname) + 1;
+    std::unique_ptr<char[]> before_ptr9(new char[25]);
+    std::unique_ptr<char[]> after_ptr9(new char[25]);
+    strncpy(before_ptr9.get(), olp.ol_dist_info, sizeof(olp.ol_dist_info)-1);
+    strncpy(before_ptr9.get(), olp.ol_dist_info, sizeof(olp.ol_dist_info)-1);
+    std::unique_ptr<char[]> field_name_ptr9(new char[flen]);
+    q.before = (char *)before_ptr9.get();
+    q.after = (char *)after_ptr9.get();
+    q.field_name = field_name_ptr9.get();
+    memcpy(q.field_name, fname, flen);
+    qs[9] = q;
+
+    page->page_LSN = ::insert("order_line", qs, page->page_id, xid, thId);
+
+    insert_list(plist,thId);
   }
 };
 

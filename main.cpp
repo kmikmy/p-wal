@@ -120,7 +120,6 @@ main(int argc, char *argv[])
 
     p.parse_check(argc, argv);
 
-    int W;
     if(p.exist("scale-factor")){
       W = p.get<int>("scale-factor");
     } else {

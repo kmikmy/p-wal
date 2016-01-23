@@ -3,6 +3,7 @@
 #include "include/tpcc_page.h"
 #include "include/tpcc_table.h"
 #include "include/tpcc_util.h"
+#include <string>
 #include <cstdlib>
 #include <algorithm>
 #include <iostream>
@@ -12,8 +13,10 @@
 
 extern DistributedTransTable *dist_trans_table;
 extern void rollback(uint32_t xid, int th_id);
+extern void begin(uint32_t xid, int th_id);
+extern void end(uint32_t xid, int th_id);
 
-void load_table(TPCC_PAGE *pages, int pagesize, int n, const char *filename);
+void load_table(TPCC_PAGE *pages, int pagesize, int n, const std::string &filename);
 
 void
 tpcc_load(){
@@ -40,9 +43,9 @@ tpcc_init(){
 }
 
 void
-load_table(TPCC_PAGE *pages, int pagesize, int n, const char *filename){
+load_table(TPCC_PAGE *pages, int pagesize, int n, const std::string &filename){
   int fd;
-  if((fd = open(filename, O_RDONLY)) == -1 ){
+  if((fd = open(filename.c_str(), O_RDONLY)) == -1 ){
     PERR("open");
   }
 
@@ -59,52 +62,11 @@ TpccTransaction::TpccTransaction(uint32_t _xid, int _thId){
 }
 
 void
-TpccTransaction::begin(){
-  Log log;
-  memset(&log,0,sizeof(log));
-  log.TransID = xid;
-  log.Type = BEGIN;
-
-  Logger::log_write(&log,thId); // log.LSNが代入される
-
-  dist_trans_table[thId].TransID = xid;
-  dist_trans_table[thId].LastLSN = log.LSN;
-  dist_trans_table[thId].LastOffset = log.Offset;
-  dist_trans_table[thId].UndoNxtLSN = log.LSN; /* BEGIN レコードは END レコードによってコンペンセーションされる. */
-  dist_trans_table[thId].LastOffset = log.Offset;
-
-#ifdef DEBUG
-  Logger::log_debug(log);
-#endif
-}
-
-void
-TpccTransaction::end(){
-  Log log;
-  memset(&log,0,sizeof(log));
-  log.TransID = xid;
-  log.Type = END;
-  log.PrevLSN = dist_trans_table[thId].LastLSN;
-  log.PrevOffset = dist_trans_table[thId].LastOffset;
-  log.UndoNxtLSN = 0; /* 一度 END ログが書かれたトランザクションは undo されることはない */
-  log.UndoNxtOffset = 0;
-
-  Logger::log_write(&log,thId);
-
-  /* dist_transaction_tableのエントリを削除する. */
-  memset(&dist_trans_table[thId], 0, sizeof(DistributedTransTable));
-
-#ifdef DEBUG
-  Logger::log_debug(log);
-#endif
-}
-
-void
 TpccTransaction::run(){
-  begin();
+  ::begin(xid, thId);
   int ret = procedure();
   if(ret >= 0){
-    end();
+    ::end(xid, thId);
   }
   unlock_all_page(thId);
 }
@@ -178,9 +140,13 @@ XNewOrder::procedure(){
   PageWarehouse *wp = Warehouse::select1(w_id, thId);
   double w_tax = wp->w_tax;
   PageDistrict *dp = District::select1(w_id, d_id, thId);
+  if(dp == NULL){
+    PERR("dp is NULL!");
+  }
   double d_tax = dp->d_tax;
   uint32_t o_id;
   uint32_t d_next_o_id = dp->d_next_o_id;
+
   o_id = dp->d_next_o_id;
   ++d_next_o_id;
 
@@ -298,8 +264,8 @@ XNewOrder::procedure(){
     if(ol_supply_w_id[i] != w_id )
       ++s_remote_cnt[i];
 
-    //    Stock::update1(s_quantity[i], s_ytd[i], s_order_cnt[i], s_remote_cnt[i], sp[i], thId, xid);
-    // stockテーブルのロードに失敗しているらしい.
+    Stock::update1(s_quantity[i], s_ytd[i], s_order_cnt[i], s_remote_cnt[i], sp[i], thId, xid);
+
     olp[i].ol_amount = ol_quantity[i] * i_price[i];
     if(strstr(ip[i]->i_data, "ORIGINAL") && strstr(sp[i]->s_data, "ORIGINAL")){
       strncpy(brand_generic[i],"B",2);

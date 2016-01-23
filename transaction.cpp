@@ -1,5 +1,6 @@
 #include "include/ARIES.h"
 #include "include/dpt.h"
+#include "plugin/tpc-c/include/workload.h"
 #include <iostream>
 #include <cstdlib>
 #include <pthread.h>
@@ -9,7 +10,7 @@
 #include <algorithm>
 //#include "plugin/tpc-c/include/tpcc.h"
 
-//Constant g_c;
+Constant g_c;
 
 #define EX1
 //#define EX10
@@ -19,6 +20,7 @@
 
 using namespace std;
 enum T_Mode { COMMIT_M, UPDATE_M, ROLLBACK_M, FLUSH_M, SHOWDP_M };
+extern int W;
 
 // normal processing 用
 DistributedTransTable *dist_trans_table;
@@ -111,19 +113,18 @@ startTransactionSimple(uint32_t xid, int th_id)
 void
 startTransactionNewOrder(uint32_t xid, int thId)
 {
-  //  XNewOrder x(xid, thId, g_c);
-  //  x.run();
+  XNewOrder x(xid, thId, g_c);
+  x.run();
 }
 
 void
 startTransaction(uint32_t xid, int thId)
 {
-  //  if(W > 0){
-  //    start_transaction_new_order(xid, thId);
-  //  } else {
-  //    start_transaction_simple(xid, thId);
-  //  }
-  startTransactionSimple(xid, thId);
+  if(W > 0){
+    startTransactionNewOrder(xid, thId);
+  } else {
+    startTransactionSimple(xid, thId);
+  }
 }
 /*
   逐次でトランザクションを num 件実行する。

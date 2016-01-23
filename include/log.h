@@ -63,7 +63,6 @@ typedef struct _FieldLogList {
  public:
   size_t field_offset, field_length;
   char *before, *after;
-  _FieldLogList *nxt;
 } FieldLogList;
 
 #pragma pack()
