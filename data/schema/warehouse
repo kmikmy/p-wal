@@ -1,0 +1,9 @@
+w_id:uint32_t // 2*W のユニークなIDの範囲(W個のWarehouseがある)
+w_name:char:11 // varchar(10)
+w_street_1:char:21 // varchar(20)
+w_street_2:char:21 // varchar(20)
+w_city:char:21 // varchar(20)
+w_state:char:3 // char(2)
+w_zip:char:10 // char(9)
+w_tax:double // DECIMAL(4,4) 全部で四桁(少数点以下4桁)
+w_ytd:double // DECIMAL(12,2) year to date balance 今年の総売上

@@ -1,4 +1,21 @@
-c_id:int:
-c_discount:double:
-c_first_name:char:40
-c_last_name:char:40
+c_id:uint32_t // 96,000のユニークなID．地区ごとに3,000の消費者がいる
+c_d_id:uint32_t // 20のユニークID
+c_w_id:uint32_t // 2*WのユニークID
+c_first:char:17 // varchar(16)
+c_middle:char:17 // varchar(16)
+c_last:char:17 // varchar(16)
+c_street_1:char:21 // varchar(20)
+c_street_2:char:21 // varchar(20)
+c_city:char:21 // varchar(20)
+c_state:char:3// char(2)
+c_zip:char:10 // char(9)
+c_phone:char:17 //char(16)
+c_since:char:32 // datetime # "Fri May 11 21:44:53 2001\n\0" may be 26
+c_credit:char:3 // char(2) "GC=good", "BC"=bad
+c_credit_lim:double // DECIMAL(12,2)
+c_discount:double // DECIMAL(4,4)
+c_balance:double // DECIMAL(12,2)
+c_ytd_payment:double // DECIMAL(12,2)
+c_payment_cnt:uint32_t // DECIMAL(4,0)
+c_delivery_cnt:uint32_t // DECIMAL(4,0)
+c_dataD:char:501 // varchar(500)

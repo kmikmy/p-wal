@@ -1,0 +1,17 @@
+s_i_id:uint32_t: // 200,000のユニークID．100,000アイテムが存在する
+s_w_id:uint32_t: // 2*WのユニークID
+s_quantity:uint32_t // signed numberic(4)
+s_dist_01:char:25 // fixed tex, size 24
+s_dist_02:char:25 // fixed tex, size 24
+s_dist_03:char:25 // fixed tex, size 24
+s_dist_04:char:25 // fixed tex, size 24
+s_dist_05:char:25 // fixed tex, size 24
+s_dist_06:char:25 // fixed tex, size 24
+s_dist_07:char:25 // fixed tex, size 24
+s_dist_08:char:25 // fixed tex, size 24
+s_dist_09:char:25 // fixed tex, size 24
+s_dist_10:char:25 // fixed tex, size 24
+s_ytd:uint32_t: // numeric(8)
+s_order_cnt:uint32_t: // numeric(8)
+s_remote_cnt:uint32_t: // numeric(4)
+s_data:char:51 // varchar(50)．Make information

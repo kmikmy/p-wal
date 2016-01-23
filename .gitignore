@@ -20,7 +20,7 @@
 *.exe
 
 # aries
-data/*
+data/*.dat
 !.gitkeep
 
 #tpcc

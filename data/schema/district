@@ -1,0 +1,11 @@
+d_id:uint32_t // 20 のユニークなIDの範囲(Warehouse毎に10個ある)
+d_w_id:uint32_t // FK, references W_ID
+d_name:char:21 // varchar(20)
+d_street_1:char:21 // varchar(20)
+d_street_2:char:21 // varchar(20)
+d_city:char:21 // varchar(20)
+d_state:char:3 // char(2)
+d_zip:char:10 // char(9)
+d_tax:dobule // DECIMAL(4,4) 全部で四桁(少数点以下4桁)
+d_ytd:double // DECIMAL(12,2)
+d_next_o_id:uint32_t // 10,000,000のユニークな値の範囲．次の利用可能な注文番号
