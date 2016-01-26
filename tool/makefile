@@ -6,7 +6,7 @@ PROGS = write_pages read_pages read_master_record read_logs read_fio init init_f
 
 .SUFFIXES: .cpp .o
 
-.cpp.o:	
+.cpp.o:
 	$(CC) $(CFLAGS) -MMD -MP -c $<
 
 .PHONY: clean
@@ -48,7 +48,16 @@ init_fio: init.cpp
 load_schema: load_schema.cc ../schema.cpp
 	$(CC) $(CFLAGS) -o load_schema.exe $^
 
+util.o :
+	$(CC) $(CFLAGS) -c ../util.cpp
+
+logger.o :
+	$(CC) $(CFLAGS) -c ../logger.cpp
+
+point_read_log: point_read_log.o logger.o util.o
+	$(CC) $(CFLAGS) -o point_read_log.exe $^
+
+
 # clean
 clean:
 	rm -rf *.o *~ *.exe
-

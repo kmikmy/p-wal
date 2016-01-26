@@ -241,7 +241,7 @@ begin(uint32_t xid, int th_id=0)
 
 
 #ifdef DEBUG
-  Logger::log_debug(log);
+  Logger::logDebug(log);
 #endif
 }
 
@@ -266,7 +266,7 @@ end(uint32_t xid, int th_id=0)
   memset(&dist_trans_table[th_id], 0, sizeof(DistributedTransTable));
 
 #ifdef DEBUG
-  Logger::log_debug(log);
+  Logger::logDebug(log);
 #endif
 }
 
@@ -391,8 +391,6 @@ insert(const char* table_name, const std::vector<QueryArg> &qs, uint32_t page_id
 void
 rollback(uint32_t xid, int th_id)
 {
-  //  cout << "rollback[" << xid << "]" << std::endl;
-
   int log_fd = open(Logger::logpath, O_RDONLY);
   if(log_fd == -1){
     perror("open"); exit(1);
@@ -408,7 +406,9 @@ rollback(uint32_t xid, int th_id)
   while(log_offset != 0){ // lsnが0になるのはprevLSNが0のBEGINログを処理した後
     lseek(log_fd, log_offset, SEEK_SET);
 
-    int ret = read(log_fd, &log, sizeof(Log));
+    int ret;
+
+    ret = read(log_fd, &log, sizeof(Log));
     if(ret == -1){
       perror("read"); exit(1);
     }
@@ -419,7 +419,7 @@ rollback(uint32_t xid, int th_id)
     }
 
 #ifdef DEBUG
-    Logger::log_debug(log);
+    Logger::logDebug(log);
 #endif
 
     if (log.type == UPDATE || log.type == INSERT){
@@ -438,7 +438,7 @@ rollback(uint32_t xid, int th_id)
 	} else if(strncmp(log.table_name, "customer", sizeof(log.table_name)-1 ) == 0){
 	  //	  memcpy(&Customer::pages[idx-1], log.padding, sizeof(PageCustomer));
 	  Customer::pages[idx-1].page_LSN = log.prev_lsn;
-	} else if(strncmp(log.table_name, "history", sizeof(log.table_name)-1 ) == 0){
+} else if(strncmp(log.table_name, "history", sizeof(log.table_name)-1 ) == 0){
 	  /* not defined */
 	} else if(strncmp(log.table_name, "order", sizeof(log.table_name)-1 ) == 0){
 	  // memcpy(&Order::pages[idx-1], log.padding, sizeof(PageOrder));
@@ -457,6 +457,7 @@ rollback(uint32_t xid, int th_id)
 	  Stock::pages[idx-1].page_LSN = log.prev_lsn;
 	} else {
 	  cout << log.table_name << endl;
+	  Logger::logDebug(log);
 	  PERR("table name info is broken.");
 	}
       } if(log.type == INSERT){
@@ -493,13 +494,20 @@ rollback(uint32_t xid, int th_id)
       Log clog;
 
       memset(&clog,0,sizeof(Log));
+      clog.trans_id = log.trans_id;
       clog.type = COMPENSATION;
       clog.trans_id = log.trans_id;
+
+      clog.total_field_length = 0;
+      clog.total_length = sizeof(LogRecordHeader);
 
       clog.page_id = log.page_id;
       clog.table_id = log.table_id;
       clog.undo_nxt_lsn = log.prev_lsn;
       clog.undo_nxt_offset = log.prev_offset;
+
+      strncpy(clog.table_name, log.table_name, sizeof(log.table_name));
+
       // clog.before isn't needed because compensation log record is redo-only.
 
       //      clog.after = log.before;
@@ -512,7 +520,7 @@ rollback(uint32_t xid, int th_id)
       ret = Logger::logWrite(&clog, empty, 0);
 
 #ifdef DEBUG
-      Logger::log_debug(clog);
+      Logger::logDebug(clog);
 #endif
 
       dist_trans_table[th_id].LastLSN = clog.lsn;
@@ -530,6 +538,8 @@ rollback(uint32_t xid, int th_id)
       memset(&end_log,0,sizeof(Log));
       end_log.type = END;
       end_log.trans_id = log.trans_id;
+      end_log.total_length = sizeof(Log);
+      end_log.total_field_length = 0;
 
       end_log.prev_lsn = dist_trans_table[th_id].LastLSN;
       end_log.prev_offset = dist_trans_table[th_id].LastOffset;

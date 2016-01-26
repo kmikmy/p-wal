@@ -7,4 +7,4 @@ ol_supply_w_id:int: // 2*WのユニークID
 ol_delivery_d:char:20 // date and time, or null numeric(2)
 ol_quantity:int: // numeric(2)
 ol_amount:double:  // signed numeric(6, 2)
-ol_dist_info:char:25; // fixed text, size 24
+ol_dist_info:char:25 // fixed text, size 24

@@ -76,6 +76,7 @@ class Logger
 
   static const char* logpath;
   static void setNumGroupCommit(int group_param);
+  static uint64_t getTotalWriteSize();
   static int logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id);
   static void logFlush(int th_id);
   static void logAllFlush();

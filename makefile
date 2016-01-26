@@ -6,7 +6,7 @@ program = aries
 objs = main.o schema.o transaction.o system.o logger.o update.o global.o buffer.o queue_mgr.o dpt.o util.o plugin/tpc-c/new-order.o plugin/tpc-c/tpcc_table.o plugin/tpc-c/tpcc_util.o # recovery.o
 srcs = $(objs:%.o=%.c)
 CC = g++
-CFLAGS = -g -Wall -std=c++11 -lpthread -O2 #-lprofiler
+CFLAGS = -g -Wall -std=c++11 -lpthread -O2 -lprofiler
 
 all: aries aries_batch aries_fio aries_fio_batch
 

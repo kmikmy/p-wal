@@ -44,12 +44,18 @@ public:
   int c_for_c_id;
   int c_for_ol_i_id;
 
+
+  static int c_load;
+
   Constant(){
     /* validate C-Run by using this value(C-Load) */
-    FD fd;
-    int c_load, c_run, c_delta;
-    fd.open(CLOADFILENAME, O_RDONLY);
-    read(fd.fd(), &c_load, sizeof(int));
+    int c_run, c_delta;
+
+    if(c_load == -1){
+      FD fd;
+      fd.open(CLOADFILENAME, O_RDONLY);
+      read(fd.fd(), &c_load, sizeof(int));
+    }
 
     do{
       c_run = uniform(0, 255);

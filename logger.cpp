@@ -43,6 +43,7 @@ class LogBuffer{
 
  public:
   ChunkLogHeader chunk_log_header[2];
+  uint64_t total_write_size;
 
   // O_DIRECTで読み書きするのでポインタで取得する
   // next_offsetの計算で読み込むため、ダブルバッファ用に二つ用意しなければならない
@@ -61,6 +62,7 @@ class LogBuffer{
       perror("open");
       exit(1);
     }
+    total_write_size = 0;
   }
 
   void
@@ -176,12 +178,15 @@ class LogBuffer{
     if( -1 == write( log_fd, log_buffer_body[id], chunk_log_header[id].chunk_size)){
       perror("write(ChunkLog)"); exit(1);
     }
+    total_write_size += chunk_log_header[id].chunk_size;
 
     /* ログセグメントの先頭(ログセグメントヘッダの買い込み開始地点)にlseek */
     lseek(log_fd, segment_base_addr, SEEK_SET);
     if(-1 == write(log_fd, log_segment_header[id], sizeof(LogSegmentHeader))){
       perror("write(LogSegmentHeader)"); exit(1);
     }
+    total_write_size += sizeof(LogSegmentHeader);
+
     fsync(log_fd);
   }
 
@@ -233,6 +238,11 @@ class LogBuffer{
     int id = getDoubleBufferFlag();
     int ptr = getPtrOnChunk();
 
+    if(log->lsn == 0 || log->offset == 0){
+      perror("log-data is broken! in push()");
+      exit(1);
+    }
+
     if(ptr + log->total_length >= MAX_CHUNK_LOG_SIZE){
       perror("can't push");
       exit(1);
@@ -272,6 +282,7 @@ class LogBuffer{
 #else
     /* この時点で既にインサートロックを獲得している */
     _ret.first = _pos; // Normal WALではLSNとoffsetは等しい
+
     ARIES_SYSTEM::master_record.system_last_lsn = _pos; // システムのGlobalLSNの更新
 #endif
 
@@ -346,6 +357,11 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
   log->offset = lsn_and_offset.second;
   log->file_id = th_id;
 
+  if(log->lsn == 0 || log->offset == 0){
+    perror("log-data is broken! in logWrite()");
+    exit(1);
+  }
+
   while(try_push){
     if(logBuffer[th_id].ableToAdd(log->total_length)){
       logBuffer[th_id].push(log, field_log_list);
@@ -408,6 +424,7 @@ Logger::logDebug(Log log)
   std::cout << "]: trans_id: " << log.trans_id;
   std::cout << ", file_id: " << log.file_id;
   std::cout << ", type: " << log.type;
+  std::cout << ", table_name: " << log.table_name;
   std::cout << ", page_id: " << log.page_id;
   std::cout << ", prev_lsn: " << log.prev_lsn;
   std::cout << ", undo_nxt_lsn: " << log.undo_nxt_lsn;
@@ -425,6 +442,17 @@ void
 Logger::setNumGroupCommit(int group_param)
 {
   num_group_commit = group_param;
+}
+
+uint64_t
+Logger::getTotalWriteSize()
+{
+  uint64_t total = 0;
+  for(int i=0; i<MAX_WORKER_THREAD;i++){
+    total += logBuffer[i].total_write_size;
+  }
+
+  return total;
 }
 
 uint32_t Logger::num_group_commit = 1;

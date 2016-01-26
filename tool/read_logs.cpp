@@ -17,6 +17,8 @@ static const char* log_path = "/dev/fioa";
 //static const char* log_path = "/dev/shm/kamiya/log.dat";
 #endif
 
+uint64_t current_offset = 0;
+uint64_t current_records = 0;
 
 const int kFirstReadChunkSize = 512;
 const int kMaxFieldLength = 256;
@@ -109,6 +111,7 @@ DisplayLogRecord(LogRecordHeader *lrh, char *log_record_body){
 
     // field_log_headerの値の読み込みがおかしい
     memcpy(&field_log_header, log_record_body + ptr_on_log_record, sizeof(FieldLogHeader));
+
     DisplayFieldLog(&field_log_header, log_record_body + ptr_on_log_record);
 
     ptr_on_log_record += (sizeof(FieldLogHeader) + field_log_header.fieldLength * 2);
@@ -118,14 +121,22 @@ DisplayLogRecord(LogRecordHeader *lrh, char *log_record_body){
 void
 DisplayChunk(ChunkLogHeader *clh, char *chunk_buffer){
   uint64_t ptr_on_chunk = sizeof(ChunkLogHeader);
+
   cout << "chunk_size: " << clh->chunk_size << ", log_record_num: " <<
     clh->log_record_num << endl;
 
+  current_offset += ptr_on_chunk;
+  current_records = 0;
+
   LogRecordHeader lrh;
   for(uint32_t i=0; i < clh->log_record_num; i++){
+    current_records++;
     memcpy(&lrh, chunk_buffer+ptr_on_chunk, sizeof(LogRecordHeader));
+    std::cout << "[" << current_records << "/" << clh->log_record_num << "]" << "current_offset: " << current_offset << std::endl;
     DisplayLogRecord(&lrh, chunk_buffer+ptr_on_chunk);
     ptr_on_chunk += lrh.total_length;
+    current_offset += lrh.total_length;
+
   }
 }
 
@@ -141,6 +152,8 @@ DisplayLogs(){
 
   off_t base = 0;
   for(int i=0;i<kNumMaxLogSegment;i++,base+=LOG_OFFSET){
+    current_offset = base;
+    std::cout << "current_offset: " << current_offset << std::endl;
 
 #ifdef FIO
     printf("\n###   LogFile(%d)   ###\n",i);
@@ -166,7 +179,9 @@ DisplayLogs(){
       memcpy(&clh, chunk_buffer, sizeof(ChunkLogHeader));
 
       if(clh.chunk_size != kFirstReadChunkSize){
-	lseek(fd, -kFirstReadChunkSize, SEEK_CUR);
+	current_offset = lseek(fd, -kFirstReadChunkSize, SEEK_CUR);
+	std::cout << "current_offset: " << current_offset << std::endl;
+
 	free(chunk_buffer);
 	PosixMemAlignReadOrDie(fd, &chunk_buffer, clh.chunk_size);
       }

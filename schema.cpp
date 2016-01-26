@@ -68,7 +68,7 @@ loadSchema(const char *fname)
   sname += SCHEMA_DIR_NAME;
   sname += fname;
 
-  std::regex re("(.+):(int|double|char):(\\d+)?"); /* (fieldName):(typeName):(length)*/
+  std::regex re("(.+):(int|double|char|uint32_t|uint64_t):?(\\d+)?"); /* (fieldName):(typeName):(length)*/
   std::smatch match;
 
   std::string tmp;

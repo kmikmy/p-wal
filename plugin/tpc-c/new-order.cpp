@@ -27,7 +27,7 @@ tpcc_load(){
   load_table(OrderLine::pages, sizeof(PageOrderLine), W*10*3000*15, OLFILENAME );
   load_table(NewOrder::pages, sizeof(PageNewOrder), W*10*900, NOFILENAME );
   load_table(Item::pages, sizeof(PageItem), 100000, IFILENAME );
-  load_table(Stock::pages, sizeof(PageStock), W*10*100000, SFILENAME );
+  load_table(Stock::pages, sizeof(PageStock), W*100000, SFILENAME );
 }
 
 void
@@ -57,6 +57,7 @@ load_table(TPCC_PAGE *pages, int pagesize, int n, const std::string &filename){
 }
 
 TpccTransaction::TpccTransaction(uint32_t _xid, int _thId){
+
   xid = _xid;
   thId = _thId;
 }

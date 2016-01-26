@@ -1,5 +1,6 @@
 #include "include/ARIES.h"
 #include "include/cmdline.h"
+#include "include/log.h"
 #include "plugin/tpc-c/include/tpcc_util.h"
 #include <cstdlib>
 #include <iostream>
@@ -29,7 +30,14 @@ getDiffTimeSec(struct timeval begin, struct timeval end){
 static void
 printTPS(struct timeval begin, struct timeval end, uint64_t xact_num){
   double time_sec = getDiffTimeSec(begin, end);
-  cout << xact_num / time_sec << endl;
+  cout << xact_num / time_sec << " (tps)";
+}
+
+static void
+printMBandwidth(struct timeval begin, struct timeval end){
+  double time_sec = getDiffTimeSec(begin, end);
+
+  cout << Logger::getTotalWriteSize() / time_sec / 1024 / 1024 << " (MiB/sec)";
 }
 
 std::istream&
@@ -60,6 +68,9 @@ fixedThreadMode(int n,int nthread)
   gettimeofday(&end, NULL);
 
   printTPS(begin, end, n);
+  cout << ", ";
+  printMBandwidth(begin, end);
+  cout << endl;
 
   ARIES_SYSTEM::normalExit();
 }
@@ -123,7 +134,7 @@ main(int argc, char *argv[])
     if(p.exist("scale-factor")){
       W = p.get<int>("scale-factor");
     } else {
-      W = 1;
+      W = 0;
     }
 
     if(p.exist("nthread")){

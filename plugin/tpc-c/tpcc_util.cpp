@@ -5,6 +5,8 @@
 
 int W = 0;
 
+int Constant::c_load = -1;
+
 /* return [x..y] */
 int
 uniform(int x, int y){
@@ -66,7 +68,7 @@ gen_rand_astring(char *str, int minlen, int maxlen){
   int i;
   int len = uniform(minlen, maxlen);
   int tmp;
-  
+
   for(i=0; i<len; i++){
     tmp = rand() % 62;
     if(tmp < 26){
@@ -114,14 +116,14 @@ gen_rand_astring_with_original(char *str, int min, int max, int percentile){
   if(percentile > uniform(0,99)){
     original_flag = true;
   }
-  
+
   int len = uniform(min, max);
   gen_rand_astring(str, len, len);
-  
+
   if(original_flag){
     int insert_pos = uniform(0, len-8);
     strncpy(&str[insert_pos], "ORIGINAL", 8); // ! not include '\0'
-  }  
+  }
 }
 
 /* return [min/(10^precision) .. max/(10^precision)] */
@@ -133,4 +135,3 @@ void gen_rand_decimal(double *d, int min, int max, int precision){
     *d /= 10;
   }
 }
-

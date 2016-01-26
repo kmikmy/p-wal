@@ -50,6 +50,10 @@ class TableSchema {
 
   FieldInfo
   getFieldInfo(std::string str){
+    auto search = fmap.find(str);
+    if(search == fmap.end()) {
+      std::cerr << "Not found field: " << str << " in " << tableName << std::endl;
+    }
     return fmap[str];
   }
   void
