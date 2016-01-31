@@ -75,7 +75,9 @@ startTransactionSimple(uint32_t xid, int th_id)
   /* 命令群を構成する */
   OP ops[MAX_UPDATE];
   uint32_t page_ids[MAX_UPDATE];
-  int update_num = rand() % MAX_UPDATE + 1; // UPDATE 回数
+  int update_num=1;
+
+  //  update_num = random() % MAX_UPDATE + 1; // UPDATE 回数
 
 #ifdef EX1
   update_num = 1;

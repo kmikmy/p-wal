@@ -35,6 +35,7 @@ extern void pbufInit();
 extern void tpcc_init();
 extern void tpcc_load();
 
+extern void mt19937Init();
 
 static void
 createDistTransTable(int th_num)
@@ -87,6 +88,8 @@ ARIES_SYSTEM::dbInit(int th_num)
   // tpc-c
   tpcc_init();
   tpcc_load();
+  // mt19937
+  mt19937Init();
 
   loadAllSchema();
 }

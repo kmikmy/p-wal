@@ -9,6 +9,8 @@
 #include <set>
 #include <sys/time.h>
 #include <pthread.h>
+#include <random>
+
 //#include "plugin/tpc-c/include/tpcc.h"
 
 // #define READ_MODE 1
@@ -33,6 +35,7 @@ void begin(uint32_t xid, int th_id);
 void end(uint32_t xid, int th_id);
 void rollback(uint32_t xid, int th_id);
 
+static std::mt19937 mt;
 
 std::istream&
 operator>>( std::istream& is, UP_OPTYPE& i )
@@ -44,23 +47,31 @@ operator>>( std::istream& is, UP_OPTYPE& i )
 }
 
 void
+mt19937Init(void){
+  std::random_device rd;
+  mt.seed(rd());
+}
+
+void
 operationSelect(OP *op)
 {
-    int tmp = rand() % 3 + 1;
-    switch(tmp){
-    case 1: op->op_type = INC; break;
-    case 2: op->op_type = DEC; break;
-    case 3: op->op_type = SUBST; break;
-    default : op->op_type = INC; break;
-    }
-    op->amount = rand() % 100 + 1;
+  int tmp;
+  //  tmp = random() % 3 + 1;
+  tmp = 1;
+  switch(tmp){
+  case 1: op->op_type = INC; break;
+  case 2: op->op_type = DEC; break;
+  case 3: op->op_type = SUBST; break;
+  default : op->op_type = INC; break;
+  }
+  op->amount = 50;
 }
 
 void
 pageSelect(uint32_t *page_id)
 {
-  *page_id = (uint32_t)PAGE_N*((double)rand()/((double)RAND_MAX+1.0));
-
+  std::uniform_int_distribution<int> uni_rand(1, PAGE_N);
+  *page_id = uni_rand(mt);
 }
 
 static void
@@ -107,6 +118,7 @@ updateOperations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int 
 	  if(pthread_rwlock_trywrlock(&pbuf->lock) == 0)
 	    break; // 書き込みロックの獲得に成功したらbreakする。
 	}
+
 	/*
 	  開始時からの経過時間の計測.
 	  δ以上経過してたら、打ち切ってロールバックする.
@@ -139,9 +151,10 @@ updateOperations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int 
       //      WAL_update(op, xid, page_id, th_id);
       char fname[10] = "val";
       int  flen      = strlen(fname) + 1;
+      std::uniform_int_distribution<int> uni_rand(1, 100);
 
       std::unique_ptr<int> before_ptr(new int(page_table[page_id].page.value));
-      std::unique_ptr<int> after_ptr(new int(rand()%100));
+      std::unique_ptr<int> after_ptr(new int(uni_rand(mt)));
       std::unique_ptr<char[]> field_name_ptr(new char[flen]);
 
       std::vector<QueryArg> qs(1);
