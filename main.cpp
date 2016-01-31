@@ -125,7 +125,7 @@ main(int argc, char *argv[])
     cmdline::parser p;
 
     p.add<int>("scale-factor", 'w', "( 1 - 32 )", false, 1, cmdline::range(1, 32));
-    p.add<int>("ntransaction", 'x', "( 1 - 100000 )", false, 1, cmdline::range(1, 100000));
+    p.add<int>("ntransaction", 'x', "( 1 - 1000000 )", false, 1, cmdline::range(1, 1000000));
     p.add<int>("nthread", 't', "( 1 - 32 )", false, 1, cmdline::range(1, 32));
     p.add<int>("ngroup", 'g', "( 1 - 50 )", false, 1, cmdline::range(1, 50));
 
