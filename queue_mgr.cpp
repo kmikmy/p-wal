@@ -37,11 +37,15 @@ public:
   }
   void lock()
   {
+#ifndef BATCH_TEST
     pthread_mutex_lock(&mutex);
+#endif
   }
   void unlock()
   {
+#ifndef BATCH_TEST
     pthread_mutex_unlock(&mutex);
+#endif
   }
 
   bool empty(){
@@ -330,4 +334,3 @@ manageQueueThread(void *_args)
 }
 
 #endif
-

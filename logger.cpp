@@ -183,16 +183,22 @@ class LogBuffer{
   flush(){
     int buffer_id = getDoubleBufferFlag();
 
+#ifndef FIO
     mtx_for_write.lock();
+#endif
 
     /* チャンクを切り替え */
     toggleChunk();
 
+#ifndef FIO
     mtx_for_insert.unlock();
+#endif
     /* この時点で、切り替わったチャンクにログを挿入可能 */
 
     nolockFlush(buffer_id);
+#ifndef FIO
     mtx_for_write.unlock();
+#endif
   }
 
   void
@@ -426,8 +432,9 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
   th_id = 0;
 #endif
 
-
+#ifndef FIO
   logBuffer[th_id].mtx_for_insert.lock();
+#endif
 
   lsn_and_offset = logBuffer[th_id].nextLSNAndOffset();
   log->lsn = lsn_and_offset.first;
@@ -445,7 +452,9 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
       try_push = false;
     } else {
       logBuffer[th_id].flush(); // flush()の中でinsertロックを開放している
+#ifndef FIO
       logBuffer[th_id].mtx_for_insert.lock(); // 再度insertロックの獲得を試みる
+#endif
     }
   }
 
@@ -453,8 +462,9 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
     logBuffer[th_id].flush(); // flush()の中でinsertロックを開放している
     return 0;
   }
-
+#ifndef FIO
   logBuffer[th_id].mtx_for_insert.unlock();
+#endif
   return 0;
 }
 
@@ -466,7 +476,10 @@ Logger::logFlush(int th_id)
 #ifndef FIO
   th_id = 0;
 #endif
+
+#ifndef FIO
   logBuffer[th_id].mtx_for_insert.lock();
+#endif
   logBuffer[th_id].flush(); // insertロックはLogger.flush()の中で開放される
 }
 
