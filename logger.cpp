@@ -1,5 +1,7 @@
 #include "include/ARIES.h"
 #include "include/log.h"
+#include <nvm/nvm_primitives.h>
+#include <nvm/nvm_types.h>
 #include <iostream>
 #include <utility>
 #include <sys/time.h>
@@ -24,6 +26,25 @@ const char* Logger::logpath = "/dev/fioa";
 //const char* Logger::logpath = "/work2/tmp/log.dat";
 #endif
 
+#define _NVM
+#ifdef _NVM
+/******************************************************************************
+ * These macros correspond to the NVM_PRIMITIVES_API_* version macros for
+ * the library version for which this code was designed/written/modified.
+ * Whenever the code is changed to work with a newer library version, modify
+ * the below values too. The values should be taken from the nvm_primitives.h
+ * file for the version of the library used when this code was written/modified
+ * and compiled.
+ ****************************************************************************/
+//Major version of NVM library used when compiling this code
+const int  NVM_MAJOR_VERSION_USED_COMPILATION=1;
+//Minor version of NVM library used when compiling this code
+const int  NVM_MINOR_VERSION_USED_COMPILATION=0;
+//Micro version of NVM library used when compiling this code
+const int  NVM_MICRO_VERSION_USED_COMPILATION=0;
+
+#endif
+
 typedef pair<off_t, off_t> LSN_and_Offset;
 
 /*
@@ -40,6 +61,11 @@ class LogBuffer{
   off_t segment_base_addr;
   int th_id;
   int buffer_id_; // this flag's value is 0 or 1.
+
+#ifdef _NVM
+  nvm_handle_t handle = -1;
+  nvm_iovec_t *iov = NULL;
+#endif
 
  public:
   ChunkLogHeader chunk_log_header[2];
@@ -63,12 +89,32 @@ class LogBuffer{
       exit(1);
     }
     total_write_size = 0;
+
+
+#ifdef _NVM
+    /**************************/
+    /* Get the version_info   */
+    /**************************/
+    nvm_version_t                version_used_during_compilation;
+    version_used_during_compilation.major = NVM_MAJOR_VERSION_USED_COMPILATION;
+    version_used_during_compilation.minor = NVM_MINOR_VERSION_USED_COMPILATION;
+    version_used_during_compilation.micro = NVM_MICRO_VERSION_USED_COMPILATION;
+
+    /*************************/
+    /* Get the file handle   */
+    /*************************/
+    handle = nvm_get_handle(log_fd, &version_used_during_compilation);
+    if (handle < 0){
+      PERR("nvm_get_handle: failed");
+    }
+
+#endif
   }
 
   void
   clearLog(int buffer_id)
   {
-    memset(log_buffer_body[buffer_id], 0, MAX_CHUNK_LOG_SIZE);
+    //  memset(log_buffer_body[buffer_id], 0, MAX_CHUNK_LOG_SIZE);
     ptr_on_chunk_=sizeof(ChunkLogHeader);
     num_commit=0;
   }
@@ -99,6 +145,21 @@ class LogBuffer{
       }
     }
 
+#ifdef _NVM
+    iov = (nvm_iovec_t *) malloc(sizeof(nvm_iovec_t) * 2);
+    if (iov == NULL){
+      PERR("malloc");
+    }
+
+
+    //    iov[0].iov_base is decided whether log_segment_header[0,1] when write()
+    iov[0].iov_len    = 512;
+    iov[0].iov_opcode = NVM_IOV_WRITE;
+    iov[0].iov_lba    = segment_base_addr / 512;
+
+    // iov[1].iov_vase, iov_len, iov_lba are decided when write()
+    iov[1].iov_opcode = NVM_IOV_WRITE;
+#endif
 
 
     /* 初めに使うチャンクログ領域を初期化する */
@@ -173,21 +234,37 @@ class LogBuffer{
     /* チャンクログの書き込み開始地点にlseek */
     off_t write_pos = segment_base_addr + chunk_head_pos;
 
+#ifndef _NVM
     lseek(log_fd, write_pos, SEEK_SET);
-
     if( -1 == write( log_fd, log_buffer_body[id], chunk_log_header[id].chunk_size)){
       perror("write(ChunkLog)"); exit(1);
     }
-    total_write_size += chunk_log_header[id].chunk_size;
-
     /* ログセグメントの先頭(ログセグメントヘッダの買い込み開始地点)にlseek */
     lseek(log_fd, segment_base_addr, SEEK_SET);
     if(-1 == write(log_fd, log_segment_header[id], sizeof(LogSegmentHeader))){
       perror("write(LogSegmentHeader)"); exit(1);
     }
-    total_write_size += sizeof(LogSegmentHeader);
 
     fsync(log_fd);
+#else
+    iov[0].iov_base   = (uint64_t)((uintptr_t) log_segment_header[id]);
+    iov[1].iov_base   = (uint64_t)((uintptr_t) log_buffer_body[id]);
+    iov[1].iov_len    = chunk_log_header[id].chunk_size;
+    iov[1].iov_lba    = write_pos / 512;
+
+    /**************************************/
+    /* perform the batch atomic operation */
+    /**************************************/
+
+    int bytes_written = nvm_batch_atomic_operations(handle, iov, 2, 0);
+    if (bytes_written < 0){
+	PERR("nvm_batch_atomic_operations");
+    }
+
+#endif
+    total_write_size += chunk_log_header[id].chunk_size;
+    total_write_size += sizeof(LogSegmentHeader);
+
   }
 
   int
