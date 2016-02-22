@@ -48,7 +48,7 @@ public:
   }
 
   /* AnaLogBufferを使用する前に、ログ(スレッド)番号を与えて一度呼び出す */
-  void 
+  void
   init(int _th_id)
   {
     th_id = _th_id;
@@ -102,9 +102,9 @@ public:
     if(nlog <= 0){
       return -1;
     }
-    
+
     clear();
-    
+
     lseek(log_fd, log_ptr, SEEK_SET);
     int ret = read(log_fd, logs, sizeof(Log)*nlog);
     if(-1 == ret){
@@ -117,13 +117,13 @@ public:
 
     return nlog;
   }
-  
+
   //Logを一つ取り出す(ポインタを先へ進める)
   Log
   next()
   {
     // Logの再読み込み
-    if(idx == nlog){ 
+    if(idx == nlog){
       if(readLogs()==-1)
 	throw "read no log";
     }
@@ -137,37 +137,37 @@ public:
   front()
   {
     // Logの再読み込み
-    if(idx == nlog){ 
+    if(idx == nlog){
       if(readLogs()==-1)
 	throw "read no log";
     }
-    
+
     return logs[idx];
   }
 };
 #endif
 
-void 
+void
 remove_transaction_xid(uint32_t xid){
   // 現状、recoverは逐次で行うため衝突が発生しないのでコメントアウト
-  //  std::lock_guard<std::mutex> lock(trans_table_mutex); 
+  //  std::lock_guard<std::mutex> lock(trans_table_mutex);
   recovery_trans_table.erase(recovery_trans_table.find(xid));
 }
 
 static void
 transaction_table_debug(){
   TransTable::iterator it;
-  cout << "**************** Transaction Table ****************" << endl;  
+  cout << "**************** Transaction Table ****************" << endl;
   for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end(); ++it){
     std::cout << it->first << std::endl;
   }
   cout << endl;
 }
 
-static void 
+static void
 dirty_page_table_debug(){
   DirtyPageTable::iterator it;
-  cout << "**************** Dirty Page Table ****************" << endl;  
+  cout << "**************** Dirty Page Table ****************" << endl;
   for(it=dirty_page_table.begin(); it!=dirty_page_table.end(); it++){
     cout << " * " << (*it).page_id << ": LSN=" << (*it).rec_LSN << ", file_id="<< (*it).log_file_id << ", offset=" << (*it).rec_offset << endl;
   }
@@ -198,7 +198,7 @@ min_recOffsets(uint64_t *min_offsets){
 #ifndef FIO
 static int
 next_log(int log_fd, Log *log){
-    int ret = read(log_fd, log, sizeof(Log));  
+    int ret = read(log_fd, log, sizeof(Log));
     if(ret == -1){
       PERR("read");
     }
@@ -222,7 +222,7 @@ next_log(AnaLogBuffer *alogs, std::set<int> *exist_flags, Log *log){
       if(min_log.LSN > tmp_log.LSN){
 	min_id = *it;
 	min_log = tmp_log;
-      }	
+      }
     }
     catch(char const* e) {
       del_list.insert(*it);
@@ -241,7 +241,7 @@ next_log(AnaLogBuffer *alogs, std::set<int> *exist_flags, Log *log){
   }
 
   if(min_id == -1){
-    PERR("not found next processing log");    
+    PERR("not found next processing log");
   }
   alogs[min_id].next(); // LSNが一番小さなログを持っているalogを一つ進める
   *log = min_log;
@@ -277,7 +277,7 @@ analysis(uint64_t* redo_offsets){
   while(1){
     int ret = next_log(alogs, &exist_flags, &log);
     if(ret == 0) break;
-    
+
     // マスターレコードのLSNの復元
     ARIES_SYSTEM::master_record.system_last_lsn = log.LSN;
     Logger::log_debug(log);
@@ -293,24 +293,24 @@ analysis(uint64_t* redo_offsets){
       trans.LastOffset=log.Offset;
       trans.UndoNxtLSN=0;
       trans.UndoNxtOffset=0;
-      
+
       recovery_trans_table[trans.TransID] = trans;
       if(ARIES_SYSTEM::master_record.system_xid < trans.TransID)
 	ARIES_SYSTEM::master_record.system_xid = trans.TransID;
-    } 
+    }
     else if(log.Type == UPDATE || log.Type == COMPENSATION){
       recovery_trans_table[log.TransID].LastLSN = log.LSN;
-      recovery_trans_table[log.TransID].LastOffset = log.Offset;      
+      recovery_trans_table[log.TransID].LastOffset = log.Offset;
 
       if(log.Type == UPDATE){
 	// if(log is undoable)
 	recovery_trans_table[log.TransID].UndoNxtLSN = log.LSN;
 	recovery_trans_table[log.TransID].UndoNxtOffset = log.Offset;
-      } 
+      }
       else { // log.Type == COMPENSATION
 	recovery_trans_table[log.TransID].UndoNxtLSN = log.UndoNxtLSN;
 	recovery_trans_table[log.TransID].UndoNxtOffset = log.UndoNxtOffset;
-      } 
+      }
 #ifdef DEBUG
       cout << "log.PageID: " << log.PageID << endl;
 #endif
@@ -329,7 +329,7 @@ analysis(uint64_t* redo_offsets){
 
   std::list<uint32_t> del_list;
   for(TransTable::iterator it=recovery_trans_table.begin(); it!=recovery_trans_table.end(); it++){
-    if(it->second.UndoNxtLSN == 0){ 
+    if(it->second.UndoNxtLSN == 0){
       // 「BEGINだけ書かれて終了したトランザクション」、または「rollbackが完了しているがENDログが書かれていないトランザクション」のENDログを書いて、トランザクションテーブルのエントリを削除する
       del_list.push_back(it->first);
     }
@@ -342,15 +342,15 @@ analysis(uint64_t* redo_offsets){
     // clog.before isn't needed because compensation log record is redo-only.
     end_log.UndoNxtLSN = 0; // PrevLSN of BEGIN record must be 0.
     end_log.UndoNxtOffset = 0;
-    end_log.PrevLSN = recovery_trans_table.at(*it).LastLSN; 
-    end_log.PrevOffset = recovery_trans_table.at(*it).LastOffset; 
-      
+    end_log.PrevLSN = recovery_trans_table.at(*it).LastLSN;
+    end_log.PrevOffset = recovery_trans_table.at(*it).LastOffset;
+
     Logger::log_write(&end_log, 0);
 #ifdef DEBUG
     Logger::log_debug(end_log);
 #endif
 
-    remove_transaction_xid(*it); 
+    remove_transaction_xid(*it);
   }
 
 #ifdef FIO
@@ -372,7 +372,7 @@ redo(uint64_t *redo_offsets){
   if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
     perror("read"); exit(1);
   }
-  
+
   lseek(log_fd, redo_offsets[0], SEEK_SET);
   for(uint32_t i=(uint32_t)(redo_offsets[0]-sizeof(LogHeader))/sizeof(Log);i<lh.count;i++){
 
@@ -384,7 +384,7 @@ redo(uint64_t *redo_offsets){
 
 #else
 
-  std::set<int> exist_flags;  
+  std::set<int> exist_flags;
   AnaLogBuffer alogs[MAX_WORKER_THREAD];
 
   for(int i=0;i<MAX_WORKER_THREAD;i++){
@@ -396,7 +396,7 @@ redo(uint64_t *redo_offsets){
   while(1){
     int ret = next_log(alogs, &exist_flags, &log);
     if(ret == 0) break;
-    
+
 #endif
 
     Logger::log_debug(log);
@@ -406,7 +406,7 @@ redo(uint64_t *redo_offsets){
       if(dirty_page_table.contains(idx) && log.LSN >= dirty_page_table[idx].rec_LSN){
 	// redoは並列に行わないのでページへのlockはいらない
 	page_fix(idx, 0);
-      
+
 	if(page_table[idx].page.page_LSN < log.LSN){
 	  page_table[idx].page.value = log.after;
 	  page_table[idx].page.page_LSN = log.LSN;
@@ -446,29 +446,29 @@ rollback_for_recovery(uint32_t xid){
   while(lsn != 0){ // lsnが0になるのはprevLSNが0のBEGINログを処理した後
     lseek(log_fd, lsn, SEEK_SET);
 
-    int ret = read(log_fd, &log, sizeof(Log));  
+    int ret = read(log_fd, &log, sizeof(Log));
     if(ret == -1){
       perror("read"); exit(1);
     }
-    
+
     if(ret == 0){
       cout << "illegal read" << endl;
       exit(1);
     }
 
-#ifdef DEBUG    
+#ifdef DEBUG
     Logger::log_debug(log);
 #endif
-    
+
     if (log.Type == UPDATE){
       int idx=log.PageID;
-      
+
       page_table[idx].page.value = log.before;
       // 前のログレコードのLSNをページバッファに適用する
       Log tmp;
       lseek(log_fd, log.PrevLSN, SEEK_SET);
       if(read(log_fd, &tmp, sizeof(Log)) == -1) perror("read: log through PrevLSN");
-      page_table[idx].page.page_LSN = tmp.LSN; 
+      page_table[idx].page.page_LSN = tmp.LSN;
 
       Log clog;
       memset(&clog,0,sizeof(Log));
@@ -486,7 +486,7 @@ rollback_for_recovery(uint32_t xid){
 
       // compensation log recordをどこに書くかという問題はひとまず置いておく
       // とりあえず全部id=0のログブロックに書く
-      ret = Logger::log_write(&clog, 0); 
+      ret = Logger::log_write(&clog, 0);
       recovery_trans_table[xid].LastLSN = clog.Offset;
 
 #ifdef DEBUG
@@ -505,8 +505,8 @@ rollback_for_recovery(uint32_t xid){
       clog.TransID = log.TransID;
       // clog.before isn't needed because compensation log record is redo-only.
       clog.UndoNxtLSN = log.PrevLSN; // PrevLSN of BEGIN record must be 0.
-      clog.PrevLSN = recovery_trans_table.at(xid).LastLSN; 
-      
+      clog.PrevLSN = recovery_trans_table.at(xid).LastLSN;
+
       Logger::log_write(&clog, 0);
 #ifdef DEBUG
       Logger::log_debug(clog);
@@ -514,7 +514,7 @@ rollback_for_recovery(uint32_t xid){
     }
     lsn = log.PrevLSN;
   }
-  
+
   recovery_trans_table.erase(recovery_trans_table.find(xid));
 
   //  close(log_fd);
@@ -534,20 +534,20 @@ max_undo_nxt_offset(){
       offset_max = it->second.UndoNxtOffset;
     }
   }
-  
+
   return offset_max;
 }
 
-static void 
+static void
 undo(){
-  LogHeader lh;  
+  LogHeader lh;
   if( -1 == read(log_fd, &lh, sizeof(LogHeader))){
     perror("read"); exit(1);
   }
 
   // TransTable::iterator it;
   // for(it=recovery_trans_table.begin(); it!=recovery_trans_table.end();it++){
-  //   rollback_for_recovery(it->second.TransID);    
+  //   rollback_for_recovery(it->second.TransID);
   // }
 
   Log log;
@@ -567,13 +567,13 @@ undo(){
       PERR("log doesn't exist");
     }
 
-#ifdef DEBUG    
+#ifdef DEBUG
     Logger::log_debug(log);
 #endif
-    
+
     if (log.Type == UPDATE){
       int idx=log.PageID;
-      
+
       page_table[idx].page.value = log.before;
 
       Log clog;
@@ -591,9 +591,9 @@ undo(){
 
       // compensation log recordをどこに書くかという問題はひとまず置いておく
       // とりあえず全部id=0のログブロックに書く
-      ret = Logger::log_write(&clog, 0); 
+      ret = Logger::log_write(&clog, 0);
 
-      page_table[idx].page.page_LSN = clog.LSN; 
+      page_table[idx].page.page_LSN = clog.LSN;
 
       recovery_trans_table[log.TransID].LastLSN = clog.LSN;
       recovery_trans_table[log.TransID].LastOffset = clog.Offset;
@@ -617,14 +617,14 @@ undo(){
       clog.TransID = log.TransID;
       clog.UndoNxtLSN = log.PrevLSN; // PrevLSN of BEGIN record must be 0.
       clog.UndoNxtLSN = log.PrevOffset;
-      clog.PrevLSN = recovery_trans_table[log.TransID].LastLSN; 
-      clog.PrevOffset = recovery_trans_table[log.TransID].LastOffset; 
-      
+      clog.PrevLSN = recovery_trans_table[log.TransID].LastLSN;
+      clog.PrevOffset = recovery_trans_table[log.TransID].LastOffset;
+
       Logger::log_write(&clog, 0);
 #ifdef DEBUG
       Logger::log_debug(clog);
 #endif
-      
+
       recovery_trans_table.erase(recovery_trans_table.find(log.TransID));
     }
   }
@@ -675,4 +675,3 @@ void recovery(){
 
   close(log_fd);
 }
-
