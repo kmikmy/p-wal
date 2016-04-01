@@ -649,7 +649,7 @@ void recovery(){
     perror("open"); exit(1);
   }
   uint64_t *redo_offsets = (uint64_t *)malloc(sizeof(uint64_t)*MAX_WORKER_THREAD);
-  if(redo_offsets == NULL) PERR("redo_lsn == NULL");
+  if(redo_offsets == NULL) PERR("malloc");
   analysis(redo_offsets);
   cout << "done through analysis pass." << endl;
   transaction_table_debug();
