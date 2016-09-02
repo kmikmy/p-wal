@@ -1,10 +1,12 @@
 #include "include/ARIES.h"
 #include <sys/time.h>
 #include <iostream>
-
+#include <immintrin.h>
 //#define DEBUG
 
 using namespace std;
+
+volatile bool start = false;
 
 /*
    QUEUEの長さ
@@ -16,6 +18,9 @@ using namespace std;
 //#define MAX_QUEUE_SIZE 100 + 1
 
 extern MasterRecord master_record;
+extern double time_of_logging[MAX_WORKER_THREAD];
+extern double time_of_tx[MAX_WORKER_THREAD];
+
 
 /*
    TransQueue:
@@ -143,6 +148,7 @@ processQueueThread(void *_th_id)
   queue_id = 0; // 全てのスレッドで同じキューを見る。その単一キューにcreaterスレッドがエントリをプッシュしていく。
 #endif
 
+  while(!start){ _mm_pause(); }
   /* queueにタスクがある or これからまだタスクが追加される　間はループ */
   while(!dist_trans_queues[queue_id].empty() || rest_flag){
     /* この間にqueueが空になる可能性がある */
@@ -211,10 +217,46 @@ genProducerThread(int _ntrans, int _nqueue)
 }
 
 
+static double
+getDiffTimeSec(struct timeval begin, struct timeval end){
+  double Diff = (end.tv_sec*1000*1000+end.tv_usec) - (begin.tv_sec*1000*1000+begin.tv_usec);
+  return Diff / 1000. / 1000. ;
+}
+
+static void
+printTPS(struct timeval begin, struct timeval end, uint64_t xact_num){
+  double time_sec = getDiffTimeSec(begin, end);
+  cout << xact_num / time_sec << " (tps)";
+}
+
+static void
+printMBandwidth(struct timeval begin, struct timeval end){
+  double time_sec = getDiffTimeSec(begin, end);
+
+  cout << Logger::getTotalWriteSize() / time_sec / 1024 / 1024 << " (MiB/sec), Realtime: " << getDiffTimeSec(begin, end) << "(sec)";
+}
+
+static void
+printTimeOfLogging(){
+  double sum_logging = 0, sum_tx = 0;
+  int i;
+  for(i=0;i<MAX_WORKER_THREAD;i++){
+    sum_logging += time_of_logging[i];
+  }
+
+  for(i=0;i<MAX_WORKER_THREAD;i++){
+    sum_tx += time_of_tx[i];
+  }
+
+  cout << "LoggingTimeRatio: " << sum_logging/sum_tx*100 << "(" << sum_logging << "/" << sum_tx << ")";
+}
+
+
 void
-genWorkerThread(int nthread)
+genWorkerThread(int ntrans, int nthread)
 {
     pthread_t th[MAX_WORKER_THREAD];
+    struct timeval begin, end;
 
     for(int i=0; i<nthread; i++){
       int *_th_id = (int *)malloc(sizeof(int));
@@ -225,10 +267,23 @@ genWorkerThread(int nthread)
 	exit(1);
       }
     }
+    start = true;
+    gettimeofday(&begin, NULL);
 
     for(int i=0;i<nthread; i++){
       pthread_join(th[i], NULL);
     }
+    gettimeofday(&end, NULL);
+
+    printTPS(begin, end, ntrans);
+    cout << ", ";
+    printMBandwidth(begin, end);
+    cout << ", ";
+    cout << "total_write_size: " << Logger::getTotalWriteSize() / 1024.0 / 1024.0 << "(MiB)";
+    cout << ", ";
+    printTimeOfLogging();
+    cout << endl;
+    //Logger::printAllWriteTimes();
 }
 
 

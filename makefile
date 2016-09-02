@@ -6,7 +6,7 @@ program = aries
 objs = main.o schema.o transaction.o system.o logger.o update.o global.o buffer.o queue_mgr.o dpt.o util.o plugin/tpc-c/new-order.o plugin/tpc-c/tpcc_table.o plugin/tpc-c/tpcc_util.o # recovery.o
 srcs = $(objs:%.o=%.c)
 CC = g++
-CFLAGS = -g -Wall -MMD -MP -std=c++11 -O2
+CFLAGS = -g -Wall -MMD -MP -std=c++11 -O2 # -DFIO
 LDFLAGS = -lpthread -lprofiler -L/usr/lib/nvm -L/usr/lib/fio -lnvm-primitives -lvsl -ldl
 
 all: aries aries_batch aries_fio aries_fio_batch
@@ -32,9 +32,9 @@ aries_batch: $(objs)
 	$(CC) -o $(program)_batch.exe $^ $(LDFLAGS)
 
 aries_fio: $(objs)
-	$(CC) $(CFLAGS) -DFIO -c logger.cpp
-	$(CC) $(CFLAGS) -DFIO -c system.cpp
-#	$(CC) $(CFLAGS) -DFIO -c recovery.cpp
+	$(CC) $(CFLAGS) -c -DFIO logger.cpp
+	$(CC) $(CFLAGS) -c -DFIO system.cpp
+#	$(CC) $(CFLAGS) -c -DFIO recovery.cpp
 	$(CC) $(CFLAGS) -c queue_mgr.cpp
 	$(CC) -o $(program)_fio.exe $^ $(LDFLAGS)
 

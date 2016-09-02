@@ -1,7 +1,5 @@
 #include "include/ARIES.h"
 #include "include/log.h"
-#include <nvm/nvm_primitives.h>
-#include <nvm/nvm_types.h>
 #include <iostream>
 #include <utility>
 #include <sys/time.h>
@@ -9,6 +7,15 @@
 #include <fcntl.h>
 #include <mutex>
 #include <cstring>
+#include <fstream>
+
+#define _NVM
+
+#ifdef _NVM
+#include <nvm/nvm_primitives.h>
+#include <nvm/nvm_types.h>
+#endif
+
 
 using namespace std;
 
@@ -19,14 +26,22 @@ using namespace std;
    Logger::set_num_group_commit()でセットする.
 */
 
+typedef struct WriteData {
+  struct timeval t;
+  uint32_t s;
+} WriteData;
+
 #ifdef FIO
 const char* Logger::logpath = "/dev/fioa";
+//const char* Logger::logpath = "/dev/sdc1";
 #else
 const char* Logger::logpath = "/dev/fioa";
 //const char* Logger::logpath = "/work2/tmp/log.dat";
+//const char* Logger::logpath = "/dev/sdc1";
 #endif
 
-#define _NVM
+double time_of_logging[MAX_WORKER_THREAD];
+
 #ifdef _NVM
 /******************************************************************************
  * These macros correspond to the NVM_PRIMITIVES_API_* version macros for
@@ -46,6 +61,12 @@ const int  NVM_MICRO_VERSION_USED_COMPILATION=0;
 #endif
 
 typedef pair<off_t, off_t> LSN_and_Offset;
+
+static double
+getDiffTimeSec(struct timeval begin, struct timeval end){
+  double Diff = (end.tv_sec*1000*1000+end.tv_usec) - (begin.tv_sec*1000*1000+begin.tv_usec);
+  return Diff / 1000. / 1000. ;
+}
 
 /*
    LogBuffer:
@@ -70,6 +91,8 @@ class LogBuffer{
  public:
   ChunkLogHeader chunk_log_header[2];
   uint64_t total_write_size;
+  vector<struct WriteData> write_call_times;
+
 
   // O_DIRECTで読み書きするのでポインタで取得する
   // next_offsetの計算で読み込むため、ダブルバッファ用に二つ用意しなければならない
@@ -88,6 +111,7 @@ class LogBuffer{
       perror("open");
       exit(1);
     }
+    write_call_times.reserve(1000);
     total_write_size = 0;
 
 
@@ -232,7 +256,8 @@ class LogBuffer{
   {
     int id = _select_buffer;
     uint64_t chunk_head_pos = log_segment_header[id]->segment_size - chunk_log_header[id].chunk_size;
-
+    struct timeval io_time;
+    struct WriteData wd;
 
     /* チャンクの先頭にヘッダを記録 */
     memcpy( log_buffer_body[id], &chunk_log_header[id], sizeof(ChunkLogHeader));
@@ -241,15 +266,29 @@ class LogBuffer{
     off_t write_pos = segment_base_addr + chunk_head_pos;
 
 #ifndef _NVM
+    int ret;
     lseek(log_fd, write_pos, SEEK_SET);
-    if( -1 == write( log_fd, log_buffer_body[id], chunk_log_header[id].chunk_size)){
-      perror("write(ChunkLog)"); exit(1);
+    if( -1 == (ret = write( log_fd, log_buffer_body[id], chunk_log_header[id].chunk_size)) ){
+      cerr << "log_fd: " << log_fd << ",log_buffer_body[id]" << (void *)log_buffer_body[id] << ", chunk_log_header[id].chunk_size" << chunk_log_header[id].chunk_size << endl;
+       perror("write(ChunkLog)");
+       exit(1);
     }
+
+    // gettimeofday(&io_time,NULL);
+    // wd.t = io_time;
+    // wd.s = ret;
+    // write_call_times.push_back(wd);
+
     /* ログセグメントの先頭(ログセグメントヘッダの買い込み開始地点)にlseek */
     lseek(log_fd, segment_base_addr, SEEK_SET);
-    if(-1 == write(log_fd, log_segment_header[id], sizeof(LogSegmentHeader))){
-      perror("write(LogSegmentHeader)"); exit(1);
+    if(-1 == (ret = write(log_fd, log_segment_header[id], sizeof(LogSegmentHeader))) ){
+       perror("write(LogSegmentHeader)"); exit(1);
     }
+
+    // gettimeofday(&io_time,NULL);
+    // wd.t = io_time;
+    // wd.s = ret;
+    // write_call_times.push_back(wd);
 
     fsync(log_fd);
 #else
@@ -262,10 +301,16 @@ class LogBuffer{
     /* perform the batch atomic operation */
     /**************************************/
 
-    int bytes_written = nvm_batch_atomic_operations(handle, iov, 2, 0);
+    int bytes_written = 0;
+    bytes_written = nvm_batch_atomic_operations(handle, iov, 2, 0);
     if (bytes_written < 0){
-	PERR("nvm_batch_atomic_operations");
+    	PERR("nvm_batch_atomic_operations");
     }
+
+    // gettimeofday(&io_time,NULL);
+    // wd.t = io_time;
+    // wd.s = bytes_written;
+    // write_call_times.push_back(wd);
 
 #endif
     total_write_size += chunk_log_header[id].chunk_size;
@@ -426,8 +471,13 @@ Logger::init()
 int
 Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
 {
+  // struct timeval begin, end;
+
   LSN_and_Offset lsn_and_offset;
   bool try_push = true;
+
+  // gettimeofday(&begin, NULL);
+
 #ifndef FIO
   th_id = 0;
 #endif
@@ -460,11 +510,19 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
 
   if( log->type == END && logBuffer[th_id].num_commit == num_group_commit ){
     logBuffer[th_id].flush(); // flush()の中でinsertロックを開放している
+
+    // gettimeofday(&end, NULL);
+    // time_of_logging[th_id] += getDiffTimeSec(begin, end);
+
     return 0;
   }
 #ifndef FIO
   logBuffer[th_id].mtx_for_insert.unlock();
 #endif
+
+  // gettimeofday(&end, NULL);
+  // time_of_logging[th_id] += getDiffTimeSec(begin, end);
+
   return 0;
 }
 
@@ -509,24 +567,49 @@ Logger::currentOffsetLogFile(int th_id)
 void
 Logger::logDebug(Log log)
 {
-  std::cout << "Log[" << log.lsn;
-  std::cout << "," << log.offset ;
-  std::cout << "]: trans_id: " << log.trans_id;
-  std::cout << ", file_id: " << log.file_id;
-  std::cout << ", type: " << log.type;
-  std::cout << ", table_name: " << log.table_name;
-  std::cout << ", page_id: " << log.page_id;
-  std::cout << ", prev_lsn: " << log.prev_lsn;
-  std::cout << ", undo_nxt_lsn: " << log.undo_nxt_lsn;
+  std::cerr << "Log[" << log.lsn;
+  std::cerr << "," << log.offset ;
+  std::cerr << "]: trans_id: " << log.trans_id;
+  std::cerr << ", file_id: " << log.file_id;
+  std::cerr << ", type: " << log.type;
+  std::cerr << ", table_name: " << log.table_name;
+  std::cerr << ", page_id: " << log.page_id;
+  std::cerr << ", prev_lsn: " << log.prev_lsn;
+  std::cerr << ", undo_nxt_lsn: " << log.undo_nxt_lsn;
   if(log.type == UPDATE || log.type == COMPENSATION){
     // フィールドを表示する
-    //    std::cout << ", before: " << log.before;
-    //    std::cout << ", after: " << log.after;
-    //    std::cout << ", op.op_type: " << log.op.op_type;
-    //    std::cout << ", op.amount: " << log.op.amount ;
+    //    std::cerr << ", before: " << log.before;
+    //    std::cerr << ", after: " << log.after;
+    //    std::cerr << ", op.op_type: " << log.op.op_type;
+    //    std::cerr << ", op.amount: " << log.op.amount ;
   }
-  std::cout << std::endl;
+  std::cerr << std::endl;
 }
+
+void
+Logger::printAllWriteTimes()
+{
+  uint64_t base = logBuffer[0].write_call_times[0].t.tv_sec * 1000 * 1000 +
+    logBuffer[0].write_call_times[0].t.tv_usec;
+
+  string filename = "/tmp/write_call_times_all.txt";
+  std::ofstream ofs1(filename);
+  for(int i=0; i<MAX_WORKER_THREAD;i++){
+      for(auto wd: logBuffer[i].write_call_times){
+      ofs1 << (uint64_t)wd.t.tv_sec  * 1000 * 1000 + wd.t.tv_usec - base << ' ';
+      ofs1 << wd.s << std::endl;
+    }
+  }
+
+  filename = "/tmp/write_call_times_0.txt";
+  std::ofstream ofs2(filename);
+  for(auto wd: logBuffer[0].write_call_times){
+      ofs2 << (uint64_t)wd.t.tv_sec  * 1000 * 1000 + wd.t.tv_usec - base << ' ';
+      ofs2 << wd.s << std::endl;
+  }
+
+}
+
 
 void
 Logger::setNumGroupCommit(int group_param)

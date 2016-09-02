@@ -12,7 +12,7 @@ using namespace std;
 
 extern void batchStartTransaction(int);
 extern pthread_t genProducerThread(int _ntrans, int _nqueue);
-extern void genWorkerThread(int _nthread);
+extern void genWorkerThread(int _ntrans, int _nthread);
 extern void eachOperationMode(int file_id);
 
 extern MasterRecord master_record;
@@ -20,25 +20,6 @@ extern TransTable trans_table;
 extern char *ARIES_HOME;
 
 extern int W;
-
-static double
-getDiffTimeSec(struct timeval begin, struct timeval end){
-  double Diff = (end.tv_sec*1000*1000+end.tv_usec) - (begin.tv_sec*1000*1000+begin.tv_usec);
-  return Diff / 1000. / 1000. ;
-}
-
-static void
-printTPS(struct timeval begin, struct timeval end, uint64_t xact_num){
-  double time_sec = getDiffTimeSec(begin, end);
-  cout << xact_num / time_sec << " (tps)";
-}
-
-static void
-printMBandwidth(struct timeval begin, struct timeval end){
-  double time_sec = getDiffTimeSec(begin, end);
-
-  cout << Logger::getTotalWriteSize() / time_sec / 1024 / 1024 << " (MiB/sec)";
-}
 
 std::istream&
 operator>>( std::istream& is, Mode& i )
@@ -52,25 +33,15 @@ operator>>( std::istream& is, Mode& i )
 static void
 fixedThreadMode(int n,int nthread)
 {
-  struct timeval begin, end;
-
   ARIES_SYSTEM::dbInit(nthread);
   /*
     gen_producer_thread()とgen_worker_thread()の呼び出し順は固定。
     gen_worker_thread()の中でworkerスレッドに対するpthread_join()が呼び出されているため。
     gen_producer_thread()の中で、トランザクションキューが生成される
   */
-  gettimeofday(&begin, NULL);
-
   pthread_t th = genProducerThread(n, nthread);
-  genWorkerThread(nthread);
+  genWorkerThread(n, nthread);
   pthread_join(th, NULL);
-  gettimeofday(&end, NULL);
-
-  printTPS(begin, end, n);
-  cout << ", ";
-  printMBandwidth(begin, end);
-  cout << endl;
 
   ARIES_SYSTEM::normalExit();
 }

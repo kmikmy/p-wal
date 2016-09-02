@@ -23,7 +23,6 @@ const uint32_t Delta = 99999; // Delta(ms)でロックが獲得できない場�
 
 extern DistributedTransTable *dist_trans_table;
 
-
 extern BufferControlBlock page_table[PAGE_N];
 extern char *ARIES_HOME;
 
@@ -36,6 +35,14 @@ void end(uint32_t xid, int th_id);
 void rollback(uint32_t xid, int th_id);
 
 static std::mt19937 mt;
+
+double time_of_tx[MAX_WORKER_THREAD];
+
+static double
+getDiffTimeSec(struct timeval begin, struct timeval end){
+  double Diff = (end.tv_sec*1000*1000+end.tv_usec) - (begin.tv_sec*1000*1000+begin.tv_usec);
+  return Diff / 1000. / 1000. ;
+}
 
 std::istream&
 operator>>( std::istream& is, UP_OPTYPE& i )
@@ -90,6 +97,9 @@ updateOperations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int 
   OP op;
   uint32_t page_id;
   int read_value;
+
+  //  struct timeval start, stop;
+  // gettimeofday(&start, NULL);
 
 #ifndef READ_MODE
   begin(xid, th_id);  // begin log write
@@ -172,6 +182,10 @@ updateOperations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int 
   end(xid, th_id); // end log write
 #endif
   lockRelease(my_lock_table);
+
+  // gettimeofday(&stop, NULL);
+  // time_of_tx[th_id] += getDiffTimeSec(start, stop);
+
 
   return 0;
 }

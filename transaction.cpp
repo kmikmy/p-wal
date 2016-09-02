@@ -96,7 +96,7 @@ startTransactionSimple(uint32_t xid, int th_id)
       operationSelect(&ops[i]);
     }
     //    ops[i].op_type = READ;
-    //operation_select(&ops[i]);
+    //    operationSelect(&ops[i]);
     pageSelect(&page_ids[i]);
   }
 
