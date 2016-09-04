@@ -19,7 +19,7 @@ using namespace std;
 
 enum UP_OPTYPE { _EXIT, _INC, _DEC, _SUBST, _SYSTEM_FAILURE };
 
-const uint32_t Delta = 99999; // Delta(ms)でロックが獲得できない場合はrollbackする。
+const uint32_t Delta = 100; // Delta(ms)でロックが獲得できない場合はrollbackする。
 
 extern DistributedTransTable *dist_trans_table;
 

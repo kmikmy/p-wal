@@ -31,6 +31,8 @@ typedef struct WriteData {
   uint32_t s;
 } WriteData;
 
+const size_t MAX_LOG_RECORD_SIZE = 4096;
+
 #ifdef FIO
 const char* Logger::logpath = "/dev/fioa";
 //const char* Logger::logpath = "/dev/sdc1";
@@ -256,8 +258,8 @@ class LogBuffer{
   {
     int id = _select_buffer;
     uint64_t chunk_head_pos = log_segment_header[id]->segment_size - chunk_log_header[id].chunk_size;
-    struct timeval io_time;
-    struct WriteData wd;
+    // struct timeval io_time;
+    // struct WriteData wd;
 
     /* チャンクの先頭にヘッダを記録 */
     memcpy( log_buffer_body[id], &chunk_log_header[id], sizeof(ChunkLogHeader));
@@ -361,33 +363,17 @@ class LogBuffer{
   }
 
   void
-  push(Log *log, std::vector<FieldLogList> &bkpblock)
+  push(char *data, size_t size, size_t insertPtr)
   {
+    Log *log = (Log *)data;
     int id = getDoubleBufferFlag();
-    int ptr = getPtrOnChunk();
-
-    if(log->lsn == 0 || log->offset == 0){
-      perror("log-data is broken! in push()");
-      exit(1);
-    }
-
-    if(ptr + log->total_length >= MAX_CHUNK_LOG_SIZE){
+    if(ptr_on_chunk_ + size >= MAX_CHUNK_LOG_SIZE){
       perror("can't push");
       exit(1);
     }
-    memcpy(&log_buffer_body[id][ptr], log, sizeof(Log));
-    ptr += sizeof(Log);
 
-    for(unsigned i=0; i<bkpblock.size(); i++){
-      memcpy(&log_buffer_body[id][ptr], &bkpblock[i], sizeof(FieldLogHeader)); // 更新フィールドのオフセットと長さ
-      ptr += sizeof(FieldLogHeader);
-      memcpy(&log_buffer_body[id][ptr], &bkpblock[i].before, bkpblock[i].field_length);
-      ptr += bkpblock[i].field_length;
-      memcpy(&log_buffer_body[id][ptr], &bkpblock[i].after, bkpblock[i].field_length);
-      ptr += bkpblock[i].field_length;
-    }
-
-    ptr_on_chunk_ = ptr;
+    // Logger::logDebug(*log);
+    memcpy(&log_buffer_body[id][insertPtr], data, size);
 
     if(log->type == END)
       num_commit++;
@@ -398,10 +384,13 @@ class LogBuffer{
   }
 
   LSN_and_Offset
-  nextLSNAndOffset()
+  bufferAcquire(size_t size, size_t *insertPtr)
   {
     LSN_and_Offset _ret;
     off_t _pos = nextOffset();
+
+    *insertPtr = ptr_on_chunk_;
+    ptr_on_chunk_ += size;
 
     _ret.second = _pos;
 
@@ -475,8 +464,20 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
 
   LSN_and_Offset lsn_and_offset;
   bool try_push = true;
+  char data[MAX_LOG_RECORD_SIZE];
+  size_t ptr = 0;
 
   // gettimeofday(&begin, NULL);
+
+  ptr += sizeof(Log);
+  for(unsigned i=0; i<field_log_list.size(); i++){
+    memcpy(&data[ptr], &field_log_list[i], sizeof(FieldLogHeader)); // 更新フィールドのオフセットと長さ
+    ptr += sizeof(FieldLogHeader);
+    memcpy(&data[ptr], &field_log_list[i].before, field_log_list[i].field_length);
+    ptr += field_log_list[i].field_length;
+    memcpy(&data[ptr], &field_log_list[i].after, field_log_list[i].field_length);
+    ptr += field_log_list[i].field_length;
+  }
 
 #ifndef FIO
   th_id = 0;
@@ -486,19 +487,24 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
   logBuffer[th_id].mtx_for_insert.lock();
 #endif
 
-  lsn_and_offset = logBuffer[th_id].nextLSNAndOffset();
+  size_t insertPtr = 0;
+  lsn_and_offset = logBuffer[th_id].bufferAcquire(log->total_length, &insertPtr);
   log->lsn = lsn_and_offset.first;
   log->offset = lsn_and_offset.second;
   log->file_id = th_id;
+
+  // Logger::logDebug(*log);
 
   if(log->lsn == 0 || log->offset == 0){
     perror("log-data is broken! in logWrite()");
     exit(1);
   }
 
+  memcpy(data, log, sizeof(Log));
+
   while(try_push){
     if(logBuffer[th_id].ableToAdd(log->total_length)){
-      logBuffer[th_id].push(log, field_log_list);
+      logBuffer[th_id].push(data, log->total_length, insertPtr); //
       try_push = false;
     } else {
       logBuffer[th_id].flush(); // flush()の中でinsertロックを開放している
