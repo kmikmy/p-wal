@@ -77,14 +77,14 @@ loadMasterRecord(){
 void
 ARIES_SYSTEM::dbInit(int th_num)
 {
-  // loggerの初期化
-  Logger::init();
   // マスターレコードの作成
   loadMasterRecord();
   // 全ページをメモリバッファに読み込んで、ロックオブジェクトを初期化する
   pbufInit();
   // 分散トランザクションテーブルの生成
   createDistTransTable(th_num);
+  // loggerの初期化
+  Logger::init();
   // tpc-c
   tpcc_init();
   tpcc_load();

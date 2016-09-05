@@ -90,6 +90,10 @@ class LogBuffer{
   nvm_iovec_t *iov = NULL;
 #endif
 
+#ifndef FIO
+  volatile size_t next_release_lsn = 0; // for decoupling buffer allocation for Aether
+#endif
+
  public:
   ChunkLogHeader chunk_log_header[2];
   uint64_t total_write_size;
@@ -187,7 +191,6 @@ class LogBuffer{
     iov[1].iov_opcode = NVM_IOV_WRITE;
 #endif
 
-
     /* 初めに使うチャンクログ領域を初期化する */
     clearLog(0);
 
@@ -197,6 +200,10 @@ class LogBuffer{
 	cout << "log file read error" << endl;
 	perror("read"); exit(1);
     }
+
+#ifndef FIO
+    next_release_lsn = nextOffset();
+#endif
   }
 
   /*
@@ -248,6 +255,9 @@ class LogBuffer{
     chunk_log_header[buffer_id_].chunk_size = 0;
     chunk_log_header[buffer_id_].log_record_num = 0;
     clearLog(buffer_id_);
+#ifndef FIO
+    next_release_lsn = nextOffset();
+#endif
   }
 
   /*
@@ -306,7 +316,8 @@ class LogBuffer{
     int bytes_written = 0;
     bytes_written = nvm_batch_atomic_operations(handle, iov, 2, 0);
     if (bytes_written < 0){
-    	PERR("nvm_batch_atomic_operations");
+      std::cerr << "iov_base: " << iov[1].iov_base << ", iov_len:" << iov[1].iov_len << ", iov_lba:" << iov[1].iov_lba << std::endl;
+      PERR("nvm_batch_atomic_operations");
     }
 
     // gettimeofday(&io_time,NULL);
@@ -375,35 +386,63 @@ class LogBuffer{
     // Logger::logDebug(*log);
     memcpy(&log_buffer_body[id][insertPtr], data, size);
 
-    if(log->type == END)
-      num_commit++;
-
-    chunk_log_header[id].log_record_num++;
-
+#ifndef FIO
+    //    std::cout << "log->lsn: " << log->lsn << ", next_release_lsn: " << next_release_lsn << endl;
+    while(next_release_lsn != log->lsn){;
+      //      std::cout << "log->lsn: " << log->lsn << ", next_release_lsn: " << next_release_lsn << endl;
+    }
+    next_release_lsn = log->lsn + size;
+#endif
     //    std::cout << "ptr: " << ptr_on_chunk_ << std::endl;
   }
 
-  LSN_and_Offset
-  bufferAcquire(size_t size, size_t *insertPtr)
+  /* この関数を呼び出す前にインサートロックを獲得している */
+  /* WALバッファ上の挿入位置を返す */
+  size_t
+  bufferAcquire(char *data)
   {
+    Log *log = (Log *)data;
     LSN_and_Offset _ret;
     off_t _pos = nextOffset();
+    int id = getDoubleBufferFlag();
+    size_t size = log->total_length;
+    size_t insertPtr;
 
-    *insertPtr = ptr_on_chunk_;
+    chunk_log_header[id].log_record_num++;
+
+    insertPtr = ptr_on_chunk_;
     ptr_on_chunk_ += size;
 
-    _ret.second = _pos;
-
+    log->offset = _pos;
+    log->file_id = th_id;
 #ifdef FIO
-    _ret.first = __sync_fetch_and_add(&ARIES_SYSTEM::master_record.system_last_lsn, 1);
+    log->lsn = __sync_fetch_and_add(&ARIES_SYSTEM::master_record.system_last_lsn, 1);
 #else
-    /* この時点で既にインサートロックを獲得している */
-    _ret.first = _pos; // Normal WALではLSNとoffsetは等しい
-
+    log->lsn = _pos; // Normal WALではLSNとoffsetは等しい
     ARIES_SYSTEM::master_record.system_last_lsn = _pos; // システムのGlobalLSNの更新
 #endif
 
-    return _ret;
+    bool try_push = true;
+    if( log->type == END && num_commit == Logger::num_group_commit ){
+      while(try_push){
+	if(ableToAdd(log->total_length)){
+	  push(data, log->total_length, insertPtr);
+	  try_push = false;
+	} else {
+	  flush(); // flush()の中でinsertロックを開放している
+#ifndef FIO
+	  mtx_for_insert.lock(); // 再度insertロックの獲得を試みる
+#endif
+	}
+	flush(); // flush()の中でinsertロックを開放している
+      }
+    } else { ;
+#ifndef FIO
+      mtx_for_insert.unlock();
+#endif
+    }
+
+    return insertPtr;
   }
 
   uint64_t
@@ -469,6 +508,7 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
 
   // gettimeofday(&begin, NULL);
 
+  memcpy(data, log, sizeof(Log));
   ptr += sizeof(Log);
   for(unsigned i=0; i<field_log_list.size(); i++){
     memcpy(&data[ptr], &field_log_list[i], sizeof(FieldLogHeader)); // 更新フィールドのオフセットと長さ
@@ -487,24 +527,25 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
   logBuffer[th_id].mtx_for_insert.lock();
 #endif
 
-  size_t insertPtr = 0;
-  lsn_and_offset = logBuffer[th_id].bufferAcquire(log->total_length, &insertPtr);
-  log->lsn = lsn_and_offset.first;
-  log->offset = lsn_and_offset.second;
-  log->file_id = th_id;
-
-  // Logger::logDebug(*log);
-
-  if(log->lsn == 0 || log->offset == 0){
-    perror("log-data is broken! in logWrite()");
-    exit(1);
+  bool flushed = false;
+  if(log->type == END){
+    logBuffer[th_id].num_commit++;
+    if( logBuffer[th_id].num_commit == Logger::num_group_commit ){
+      flushed = true;
+    }
   }
 
-  memcpy(data, log, sizeof(Log));
+  size_t insertPtr = 0;
+  //  Logger::logDebug(*log);
+  insertPtr = logBuffer[th_id].bufferAcquire(data);
+
+  if(flushed){
+    return 0;
+  }
 
   while(try_push){
     if(logBuffer[th_id].ableToAdd(log->total_length)){
-      logBuffer[th_id].push(data, log->total_length, insertPtr); //
+      logBuffer[th_id].push(data, log->total_length, insertPtr); // memcpy
       try_push = false;
     } else {
       logBuffer[th_id].flush(); // flush()の中でinsertロックを開放している
@@ -513,25 +554,11 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
 #endif
     }
   }
-
-  if( log->type == END && logBuffer[th_id].num_commit == num_group_commit ){
-    logBuffer[th_id].flush(); // flush()の中でinsertロックを開放している
-
     // gettimeofday(&end, NULL);
     // time_of_logging[th_id] += getDiffTimeSec(begin, end);
 
-    return 0;
-  }
-#ifndef FIO
-  logBuffer[th_id].mtx_for_insert.unlock();
-#endif
-
-  // gettimeofday(&end, NULL);
-  // time_of_logging[th_id] += getDiffTimeSec(begin, end);
-
   return 0;
 }
-
 
 /* ログバッファのフラッシュを行う */
 void

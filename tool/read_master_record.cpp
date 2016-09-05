@@ -29,5 +29,6 @@ read_master_record(){
   }
 
   cout << "xid is " << master_record.system_xid << endl;
+  cout << "system_last_lsn is " << master_record.system_last_lsn << endl;
   cout << "last_exit is " << std::boolalpha << master_record.last_exit << endl;
 }
