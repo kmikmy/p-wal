@@ -1,16 +1,21 @@
 #include <random>
 #include <cstring>
+#include <random>
 #include "include/tpcc.h"
 
 
-int W = 16;
+int W = 0;
 
 int Constant::c_load = -1;
+
+extern std::mt19937 mt;
 
 /* return [x..y] */
 int
 uniform(int x, int y){
-  return (rand()/(RAND_MAX+1.0))*(y-x+1)+x;
+  std::uniform_int_distribution<int> uni_rand(x, y);
+  return uni_rand(mt);
+  //return (rand()/(RAND_MAX+1.0))*(y-x+1)+x;
 }
 
 /* return Non Uniform Random value*/

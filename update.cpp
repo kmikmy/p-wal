@@ -34,7 +34,7 @@ void begin(uint32_t xid, int th_id);
 void end(uint32_t xid, int th_id);
 void rollback(uint32_t xid, int th_id);
 
-static std::mt19937 mt;
+std::mt19937 mt;
 
 double time_of_tx[MAX_WORKER_THREAD];
 

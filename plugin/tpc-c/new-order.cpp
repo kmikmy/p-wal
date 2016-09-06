@@ -15,6 +15,7 @@ extern DistributedTransTable *dist_trans_table;
 extern void rollback(uint32_t xid, int th_id);
 extern void begin(uint32_t xid, int th_id);
 extern void end(uint32_t xid, int th_id);
+extern void mt19937Init(void);
 
 void load_table(TPCC_PAGE *pages, int pagesize, int n, const std::string &filename);
 
@@ -40,6 +41,7 @@ tpcc_init(){
   NewOrder::init();
   Item::init();
   Stock::init();
+  mt19937Init();
 }
 
 void
