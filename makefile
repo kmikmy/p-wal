@@ -9,7 +9,7 @@ CC = g++
 CFLAGS = -g -Wall -MMD -MP -std=c++11 -O2 # -DFIO
 LDFLAGS = -lpthread -lprofiler -L/usr/lib/nvm -L/usr/lib/fio -lnvm-primitives -lvsl -ldl
 
-all: aries aries_batch aries_fio aries_fio_batch
+all: aries aries_batch aries_fio aries_fio_batch aether_batch
 
 .SUFFIXES: .cpp .o
 
@@ -30,6 +30,11 @@ aries: $(objs)
 aries_batch: $(objs)
 	$(CC) $(CFLAGS) -c -DBATCH_TEST queue_mgr.cpp
 	$(CC) -o $(program)_batch.exe $^ $(LDFLAGS)
+
+aether_batch: $(objs)
+	$(CC) $(CFLAGS) -c -DAETHER logger.cpp
+	$(CC) $(CFLAGS) -c -DBATCH_TEST queue_mgr.cpp
+	$(CC) -o aether_batch.exe $^ $(LDFLAGS)
 
 aries_fio: $(objs)
 	$(CC) $(CFLAGS) -c -DFIO logger.cpp

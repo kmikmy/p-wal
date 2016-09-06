@@ -438,7 +438,9 @@ class LogBuffer{
       }
     } else { ;
 #ifndef FIO
+#ifdef AETHER
       mtx_for_insert.unlock();
+#endif
 #endif
     }
 
@@ -556,6 +558,11 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
   }
     // gettimeofday(&end, NULL);
     // time_of_logging[th_id] += getDiffTimeSec(begin, end);
+#ifndef FIO
+#ifndef AETHER
+  logBuffer[th_id].mtx_for_insert.unlock();
+#endif
+#endif
 
   return 0;
 }
