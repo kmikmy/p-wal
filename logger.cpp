@@ -78,7 +78,7 @@ getDiffTimeSec(struct timeval begin, struct timeval end){
 */
 class LogBuffer{
  private:
-  static const unsigned MAX_CHUNK_LOG_SIZE=256*1024;
+  static const unsigned MAX_CHUNK_LOG_SIZE=16*1024*1024;
   unsigned ptr_on_chunk_;
   int log_fd;
   off_t segment_base_addr;
@@ -88,6 +88,8 @@ class LogBuffer{
 #ifdef _NVM
   nvm_handle_t handle = -1;
   nvm_iovec_t *iov = NULL;
+  size_t nvm_max_iov_len_size = 0;
+  size_t nvm_sector_size = 0;
 #endif
 
 #ifndef FIO
@@ -138,6 +140,15 @@ class LogBuffer{
       PERR("nvm_get_handle: failed");
     }
 
+    nvm_capability_t nvm_capability[3];
+    nvm_capability[0].cap_id = NVM_CAP_ATOMIC_WRITE_MULTIPLICITY_ID;
+    nvm_capability[1].cap_id = NVM_CAP_ATOMIC_WRITE_MAX_VECTOR_SIZE_ID;
+    nvm_capability[2].cap_id = NVM_CAP_SECTOR_SIZE_ID;
+
+    int ret = nvm_get_capabilities(handle, nvm_capability, 3, false);
+    if(ret < 3){ std::cerr << ret << std::endl; PERR("nvm_get_capabilities"); }
+    nvm_max_iov_len_size = nvm_capability[0].cap_value * nvm_capability[1].cap_value;
+    nvm_sector_size = nvm_capability[2].cap_value;
 #endif
   }
 
@@ -176,7 +187,7 @@ class LogBuffer{
     }
 
 #ifdef _NVM
-    iov = (nvm_iovec_t *) malloc(sizeof(nvm_iovec_t) * 2);
+    iov = (nvm_iovec_t *) malloc(sizeof(nvm_iovec_t) * 16);
     if (iov == NULL){
       PERR("malloc");
     }
@@ -185,10 +196,12 @@ class LogBuffer{
     //    iov[0].iov_base is decided whether log_segment_header[0,1] when write()
     iov[0].iov_len    = 512;
     iov[0].iov_opcode = NVM_IOV_WRITE;
-    iov[0].iov_lba    = segment_base_addr / 512;
+    iov[0].iov_lba    = segment_base_addr / nvm_sector_size;
 
-    // iov[1].iov_vase, iov_len, iov_lba are decided when write()
-    iov[1].iov_opcode = NVM_IOV_WRITE;
+    for(int i=1;i<16;++i){
+      // iov[i].iov_vase, iov_len, iov_lba are decided when write()
+      iov[i].iov_opcode = NVM_IOV_WRITE;
+    }
 #endif
 
     /* 初めに使うチャンクログ領域を初期化する */
@@ -305,18 +318,28 @@ class LogBuffer{
     fsync(log_fd);
 #else
     iov[0].iov_base   = (uint64_t)((uintptr_t) log_segment_header[id]);
-    iov[1].iov_base   = (uint64_t)((uintptr_t) log_buffer_body[id]);
-    iov[1].iov_len    = chunk_log_header[id].chunk_size;
-    iov[1].iov_lba    = write_pos / 512;
+
+    int64_t remain = chunk_log_header[id].chunk_size;
+    int iov_cnt = 0;
+    while(remain > 0){
+      iov[iov_cnt].iov_base   = (uint64_t)((uintptr_t) log_buffer_body[id]) + iov_cnt * nvm_max_iov_len_size;
+      iov[iov_cnt].iov_len    = remain <= (int64_t)nvm_max_iov_len_size ? remain : nvm_max_iov_len_size;
+      iov[iov_cnt].iov_lba    = write_pos / nvm_sector_size + (iov_cnt * nvm_max_iov_len_size / nvm_sector_size );
+      ++iov_cnt;
+      remain -= nvm_max_iov_len_size;
+    }
 
     /**************************************/
     /* perform the batch atomic operation */
     /**************************************/
 
     int bytes_written = 0;
-    bytes_written = nvm_batch_atomic_operations(handle, iov, 2, 0);
-    if (bytes_written < 0){
-      std::cerr << "iov_base: " << iov[1].iov_base << ", iov_len:" << iov[1].iov_len << ", iov_lba:" << iov[1].iov_lba << std::endl;
+    bytes_written = nvm_batch_atomic_operations(handle, iov, iov_cnt, 0);
+    //    std::cerr << bytes_written << std::endl;
+
+    if (bytes_written < 0 || bytes_written != (int)chunk_log_header[id].chunk_size){
+      std::cerr << "bytes_written: " << bytes_written << std::endl;
+      std::cerr <<  "handle: " << handle << ",iov_base: " << iov[0].iov_base << ", iov_len: " << iov[0].iov_len << ", iov_lba:" << iov[0].iov_lba << std::endl;
       PERR("nvm_batch_atomic_operations");
     }
 
@@ -510,6 +533,7 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
 
   // gettimeofday(&begin, NULL);
 
+  // log->total_length = 4096;
   memcpy(data, log, sizeof(Log));
   ptr += sizeof(Log);
   for(unsigned i=0; i<field_log_list.size(); i++){
@@ -521,11 +545,10 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
     ptr += field_log_list[i].field_length;
   }
 
-#ifndef FIO
-  th_id = 0;
-#endif
+  //  std::cerr << log->total_length << std::endl;
 
 #ifndef FIO
+  th_id = 0;
   logBuffer[th_id].mtx_for_insert.lock();
 #endif
 

@@ -3,7 +3,7 @@
 #include "include/tpcc.h"
 
 
-int W = 0;
+int W = 16;
 
 int Constant::c_load = -1;
 
