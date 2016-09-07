@@ -22,15 +22,15 @@ private:
   uint32_t w_id;
   Constant c;
 
-  /* input data */  
+  /* input data */
   uint32_t d_id;
   uint32_t c_id;
   uint32_t rbk;
 
-  uint32_t ol_cnt;  
-  uint32_t* ol_i_id;
-  uint32_t* ol_supply_w_id;
-  uint32_t* ol_quantity;
+  uint32_t ol_cnt;
+  uint32_t ol_i_id[15];
+  uint32_t ol_supply_w_id[15];
+  uint32_t ol_quantity[15];
 
   char o_entry_d[26];
 

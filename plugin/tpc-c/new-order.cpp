@@ -112,15 +112,6 @@ XNewOrder::procedure(){
   ol_cnt = uniform(5, 15); /* the number of items */
   rbk = uniform(1, 100); /* rbj is used to choose rollback transaction */
 
-  try {
-    ol_i_id = new uint32_t[ol_cnt];
-    ol_supply_w_id = new uint32_t[ol_cnt];
-    ol_quantity = new uint32_t[ol_cnt];
-  }
-  catch(std::bad_alloc e) {
-    PERR("new");
-  }
-
   for(uint32_t i=0;i<ol_cnt;i++){
     ol_i_id[i] = NURand(8191,1,100000,c.c_for_ol_i_id); /* choose item number */
     if(rbk == 1 && i == ol_cnt-1){ /* A fixed 1% of the New-Order transactions do rollback */
@@ -182,44 +173,23 @@ XNewOrder::procedure(){
   NewOrder::insert1(nop, thId, xid);
   Order::insert1(op, thId, xid);
 
-  PageItem **ip;
-  double *i_price;
-  char (*i_name)[25];
-  char (*i_data)[51];
+  PageItem *ip[15];
+  double i_price[15];
+  char i_name[15][25];
+  char i_data[15][51];
   //  std::vector<std::string> i_name(ol_cnt);
   //  std::vector<std::string> i_data(ol_cnt);
 
-  PageStock **sp;
-  uint32_t *s_quantity;
-  uint32_t *s_ytd;
-  uint32_t *s_order_cnt;
-  uint32_t *s_remote_cnt;
-  char (*s_dist_xx)[25];
-  char (*s_data)[51];
+  PageStock *sp[15];
+  uint32_t s_quantity[15];
+  uint32_t s_ytd[15];
+  uint32_t s_order_cnt[15];
+  uint32_t s_remote_cnt[15];
+  char s_dist_xx[15][25];
+  char s_data[15][51];
 
-  PageOrderLine *olp;
-  char (*brand_generic)[2];
-
-  try {
-    ip = new PageItem*[ol_cnt];
-    i_price = new double[ol_cnt];
-    i_name = new char[ol_cnt][25];
-    i_data = new char[ol_cnt][51];
-
-    sp = new PageStock*[ol_cnt];
-    s_quantity = new uint32_t[ol_cnt];
-    s_ytd = new uint32_t[ol_cnt];
-    s_order_cnt = new uint32_t[ol_cnt];;
-    s_remote_cnt = new uint32_t[ol_cnt];;
-    s_dist_xx = new char[ol_cnt][25];
-    s_data = new char[ol_cnt][51];
-
-    olp = new PageOrderLine[ol_cnt];
-    brand_generic = new char[ol_cnt][2];
-  }
-  catch(std::bad_alloc e) {
-    PERR("new");
-  }
+  PageOrderLine olp[15];
+  char brand_generic[15][2];
 
   double total_amount = 0.0;
   for(uint32_t i=0;i<ol_cnt;i++){
@@ -301,25 +271,6 @@ XNewOrder::procedure(){
   }
   std::cout << std::endl;
 #endif
-
-  delete[] ol_i_id;
-  delete[] ol_supply_w_id;
-  delete[] ol_quantity;
-  delete[] ip;
-  delete[] i_price;
-  delete[] i_name;
-  delete[] i_data;
-
-  delete[] sp;
-  delete[] s_quantity;
-  delete[] s_ytd;
-  delete[] s_order_cnt;
-  delete[] s_remote_cnt;
-  delete[] s_dist_xx;
-  delete[] s_data;
-
-  delete[] olp;
-  delete[] brand_generic;
 
   return 0;
 }
