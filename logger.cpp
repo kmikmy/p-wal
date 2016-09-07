@@ -320,7 +320,7 @@ class LogBuffer{
     iov[0].iov_base   = (uint64_t)((uintptr_t) log_segment_header[id]);
 
     int64_t remain = chunk_log_header[id].chunk_size;
-    int iov_cnt = 0;
+    int iov_cnt = 1;
     while(remain > 0){
       iov[iov_cnt].iov_base   = (uint64_t)((uintptr_t) log_buffer_body[id]) + iov_cnt * nvm_max_iov_len_size;
       iov[iov_cnt].iov_len    = remain <= (int64_t)nvm_max_iov_len_size ? remain : nvm_max_iov_len_size;
@@ -332,12 +332,11 @@ class LogBuffer{
     /**************************************/
     /* perform the batch atomic operation */
     /**************************************/
-
     int bytes_written = 0;
     bytes_written = nvm_batch_atomic_operations(handle, iov, iov_cnt, 0);
     //    std::cerr << bytes_written << std::endl;
 
-    if (bytes_written < 0 || bytes_written != (int)chunk_log_header[id].chunk_size){
+    if ( bytes_written < 0 || bytes_written != (int)(chunk_log_header[id].chunk_size + nvm_sector_size) ){
       std::cerr << "bytes_written: " << bytes_written << std::endl;
       std::cerr <<  "handle: " << handle << ",iov_base: " << iov[0].iov_base << ", iov_len: " << iov[0].iov_len << ", iov_lba:" << iov[0].iov_lba << std::endl;
       PERR("nvm_batch_atomic_operations");
@@ -561,8 +560,8 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
   }
 
   size_t insertPtr = 0;
-  //  Logger::logDebug(*log);
   insertPtr = logBuffer[th_id].bufferAcquire(data);
+  //  Logger::logDebug(*(Log *)data);
 
   if(flushed){
     return 0;
