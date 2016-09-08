@@ -163,19 +163,24 @@ updateOperations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int 
       int  flen      = strlen(fname) + 1;
       std::uniform_int_distribution<int> uni_rand(1, 100);
 
-      std::unique_ptr<int> before_ptr(new int(page_table[page_id].page.value));
-      std::unique_ptr<int> after_ptr(new int(uni_rand(mt)));
-      std::unique_ptr<char[]> field_name_ptr(new char[flen]);
+      char *data = (char *)calloc(1, sizeof(int)*2 + sizeof(char)*flen);
+      if(data == NULL){ PERR("calloc"); }
+
+      *(int *)&data[0] = page_table[page_id].page.value;
+      *(int *)&data[sizeof(int)] = uni_rand(mt);
+
+
+      QueryArg q;
+      q.before = data;
+      q.after = data + sizeof(int);
+      q.field_name = data + sizeof(int)*2;
+      memcpy(q.field_name, fname, flen);
 
       std::vector<QueryArg> qs(1);
-      QueryArg q;
-      q.before = (char *)before_ptr.get();
-      q.after = (char *)after_ptr.get();
-      q.field_name = field_name_ptr.get();
-      memcpy(q.field_name, fname, flen);
       qs[0] = q;
 
       update("simple", qs, page_id, xid , th_id);
+      free(data);
     }
   }
 #ifndef READ_MODE

@@ -399,7 +399,6 @@ class LogBuffer{
   void
   push(char *data, size_t size, size_t insertPtr)
   {
-    Log *log = (Log *)data;
     int id = getDoubleBufferFlag();
     if(ptr_on_chunk_ + size >= MAX_CHUNK_LOG_SIZE){
       perror("can't push");
@@ -410,6 +409,7 @@ class LogBuffer{
     memcpy(&log_buffer_body[id][insertPtr], data, size);
 
 #ifndef FIO
+    Log *log = (Log *)data;
     //    std::cout << "log->lsn: " << log->lsn << ", next_release_lsn: " << next_release_lsn << endl;
     while(next_release_lsn != log->lsn){;
       //      std::cout << "log->lsn: " << log->lsn << ", next_release_lsn: " << next_release_lsn << endl;
