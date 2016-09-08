@@ -81,7 +81,7 @@ PosixMemAlignReadOrDie(int fd, char **chunk_buf_dst, uint64_t read_size){
 
 void
 DisplayFieldLog(FieldLogHeader *flh, char *field_log_body){
-  char *before[kMaxFieldLength], *after[kMaxFieldLength];
+  char before[kMaxFieldLength], after[kMaxFieldLength];
   field_log_body += sizeof(FieldLogHeader);
 
   memcpy(before, field_log_body, flh->fieldLength);
