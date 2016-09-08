@@ -322,10 +322,11 @@ class LogBuffer{
     int64_t remain = chunk_log_header[id].chunk_size;
     int iov_cnt = 1;
     while(remain > 0){
-      iov[iov_cnt].iov_base   = (uint64_t)((uintptr_t) log_buffer_body[id]) + iov_cnt * nvm_max_iov_len_size;
+      iov[iov_cnt].iov_base   = (uint64_t)((uintptr_t) log_buffer_body[id]) + (iov_cnt-1) * nvm_max_iov_len_size;
       iov[iov_cnt].iov_len    = remain <= (int64_t)nvm_max_iov_len_size ? remain : nvm_max_iov_len_size;
-      iov[iov_cnt].iov_lba    = write_pos / nvm_sector_size + (iov_cnt * nvm_max_iov_len_size / nvm_sector_size );
+      iov[iov_cnt].iov_lba    = write_pos / nvm_sector_size + ((iov_cnt-1) * nvm_max_iov_len_size / nvm_sector_size );
       ++iov_cnt;
+
       remain -= nvm_max_iov_len_size;
     }
 
