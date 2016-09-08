@@ -539,9 +539,9 @@ Logger::logWrite(Log *log, std::vector<FieldLogList> &field_log_list, int th_id)
   for(unsigned i=0; i<field_log_list.size(); i++){
     memcpy(&data[ptr], &field_log_list[i], sizeof(FieldLogHeader)); // 更新フィールドのオフセットと長さ
     ptr += sizeof(FieldLogHeader);
-    memcpy(&data[ptr], &field_log_list[i].before, field_log_list[i].field_length);
+    memcpy(&data[ptr], field_log_list[i].before, field_log_list[i].field_length);
     ptr += field_log_list[i].field_length;
-    memcpy(&data[ptr], &field_log_list[i].after, field_log_list[i].field_length);
+    memcpy(&data[ptr], field_log_list[i].after, field_log_list[i].field_length);
     ptr += field_log_list[i].field_length;
   }
 
