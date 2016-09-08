@@ -160,21 +160,25 @@ updateOperations(uint32_t xid, OP *ops, uint32_t *page_ids, int update_num, int 
     } else {
       //      WAL_update(op, xid, page_id, th_id);
       char fname[10] = "val";
-      int  flen      = strlen(fname) + 1;
+      size_t fname_size = strlen(fname) + 1;
+      int  flen = sizeof(page_table[page_id].page.value);
+      char *fptr = (char *)&page_table[page_id].page.value;
+
       std::uniform_int_distribution<int> uni_rand(1, 100);
 
-      char *data = (char *)calloc(1, sizeof(int)*2 + sizeof(char)*flen);
+      char *data = (char *)calloc(1, flen*2 + fname_size);
       if(data == NULL){ PERR("calloc"); }
 
-      *(int *)&data[0] = page_table[page_id].page.value;
-      *(int *)&data[sizeof(int)] = uni_rand(mt);
+      int after_val = uni_rand(mt);
 
+      memcpy(data, fptr, flen);
+      memcpy(data+flen, &after_val, flen);
+      memcpy(data+flen*2, fname, fname_size);
 
       QueryArg q;
       q.before = data;
-      q.after = data + sizeof(int);
-      q.field_name = data + sizeof(int)*2;
-      memcpy(q.field_name, fname, flen);
+      q.after = data + flen;
+      q.field_name = data + flen*2;
 
       std::vector<QueryArg> qs(1);
       qs[0] = q;
