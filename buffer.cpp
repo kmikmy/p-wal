@@ -33,6 +33,9 @@ pbufInit()
     //   perror("read");
     //   exit(1);
     // }
+    page_table[i].page.page_LSN = 0;
+    page_table[i].page.value = 0;
+
     page_table[i].readed_flag=true;
     page_table[i].modified_flag=false;
   }
