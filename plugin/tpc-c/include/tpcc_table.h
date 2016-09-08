@@ -224,23 +224,43 @@ class District : public Table{
       return 1;
     lock_page(page->page_id, thId);
 
-    char fname[BUFSIZ] = "d_next_o_id";
-    int  flen      = strlen(fname) + 1;
+    char fname[1][BUFSIZ] = {"d_next_o_id"};
+    size_t fname_size[1];
+    int  flen[1] = {sizeof(d_next_o_id)};
+    char *fptr_before[1] = {(char *)&page->d_next_o_id};
+    char *fptr_after[1] = {(char *)&d_next_o_id};
 
-    std::unique_ptr<uint32_t> before_ptr(new uint32_t(page->d_next_o_id));
-    std::unique_ptr<uint32_t> after_ptr(new uint32_t(d_next_o_id));
-    std::unique_ptr<char[]> field_name_ptr(new char[flen]);
-
-    std::vector<QueryArg> qs(1);
     QueryArg q;
-    q.before = (char *)before_ptr.get();
-    q.after = (char *)after_ptr.get();
-    q.field_name = field_name_ptr.get();
-    memcpy(q.field_name, fname, flen);
-    qs[0] = q;
+    size_t alloc_size = 0;
+    size_t ptr = 0;
+    std::vector<QueryArg> qs(1);
+
+    for(int i=0; i<1; i++){
+      fname_size[i] = strlen(fname[i]) + 1;
+      alloc_size += flen[i]*2 + fname_size[i];
+    }
+
+
+    char *data = (char *)calloc(1, alloc_size);
+    if(data == NULL){ PERR("calloc"); }
+
+    for(int i=0; i<1; i++){
+      memcpy(data+ptr, fptr_before[i], flen[i]);
+      memcpy(data+ptr+flen[i], fptr_after[i], flen[i]);
+      memcpy(data+ptr+flen[i]*2, fname[i], fname_size[i]);
+
+      q.before = data + ptr;
+      q.after = data + ptr + flen[i];
+      q.field_name = data + ptr + flen[i]*2;
+
+      qs[i] = q;
+      ptr += flen[i]*2 + fname_size[i];
+    }
 
     page->page_LSN = ::update("district", qs, page->page_id, xid, thId);
     page->d_next_o_id = d_next_o_id;
+    free(data);
+
     return 0;
   }
 };
@@ -414,45 +434,39 @@ public:
     memcpy(page, &nop, sizeof(PageNewOrder));
     plist->page = page;
 
-    char fname[BUFSIZ];
-    int  flen;
+    char fname[3][BUFSIZ] = {"no_o_id", "no_d_id", "no_w_id"};
+    size_t fname_size[3];
+    int  flen[3] = {sizeof(nop.no_o_id), sizeof(nop.no_d_id), sizeof(nop.no_w_id)};
+    char *fptr[3] = {(char *)&nop.no_o_id, (char *)&nop.no_d_id, (char *)&nop.no_w_id};
+
     QueryArg q;
+    size_t alloc_size = 0;
+    size_t ptr = 0;
     std::vector<QueryArg> qs(3);
 
-    strcpy(fname, "no_o_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr1(new uint32_t(nop.no_o_id));
-    std::unique_ptr<uint32_t> after_ptr1(new uint32_t(nop.no_o_id));
-    std::unique_ptr<char[]> field_name_ptr1(new char[flen]);
-    q.before = (char *)before_ptr1.get();
-    q.after = (char *)after_ptr1.get();
-    q.field_name = field_name_ptr1.get();
-    memcpy(q.field_name, fname, flen);
-    qs[0] = q;
+    for(int i=0; i<3; i++){
+      fname_size[i] = strlen(fname[i]) + 1;
+      alloc_size += flen[i]*2 + fname_size[i];
+    }
 
-    strcpy(fname, "no_d_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr2(new uint32_t(nop.no_o_id));
-    std::unique_ptr<uint32_t> after_ptr2(new uint32_t(nop.no_o_id));
-    std::unique_ptr<char[]> field_name_ptr2(new char[flen]);
-    q.before = (char *)before_ptr2.get();
-    q.after = (char *)after_ptr2.get();
-    q.field_name = field_name_ptr2.get();
-    memcpy(q.field_name, fname, flen);
-    qs[1] = q;
+    char *data = (char *)calloc(1, alloc_size);
+    if(data == NULL){ PERR("calloc"); }
 
-    strcpy(fname, "no_w_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr3(new uint32_t(nop.no_o_id));
-    std::unique_ptr<uint32_t> after_ptr3(new uint32_t(nop.no_o_id));
-    std::unique_ptr<char[]> field_name_ptr3(new char[flen]);
-    q.before = (char *)before_ptr3.get();
-    q.after = (char *)after_ptr3.get();
-    q.field_name = field_name_ptr3.get();
-    memcpy(q.field_name, fname, flen);
-    qs[2] = q;
+    for(int i=0; i<3; i++){
+      memcpy(data+ptr, fptr[i], flen[i]);
+      memcpy(data+ptr+flen[i], fptr[i], flen[i]);
+      memcpy(data+ptr+flen[i]*2, fname[i], fname_size[i]);
+
+      q.before = data + ptr;
+      q.after = data + ptr + flen[i];
+      q.field_name = data + ptr + flen[i]*2;
+
+      qs[i] = q;
+      ptr += flen[i]*2 + fname_size[i];
+    }
 
     page->page_LSN = ::insert("new_order", qs, page->page_id, xid, thId);
+    free(data);
 
     insert_list(plist,thId);
   }
@@ -529,102 +543,39 @@ public:
     memcpy(page, &op, sizeof(PageOrder));
     plist->page = page;
 
-    char fname[BUFSIZ];
-    int  flen;
+    char fname[8][BUFSIZ] = {"o_id", "o_d_id", "o_w_id", "o_c_id", "o_entry_d", "o_carrier_id", "o_ol_cnt", "o_all_local"};
+    size_t fname_size[8];
+    int  flen[8] = {sizeof(op.o_id), sizeof(op.o_d_id), sizeof(op.o_w_id), sizeof(op.o_c_id), sizeof(op.o_entry_d), sizeof(op.o_carrier_id), sizeof(op.o_ol_cnt), sizeof(op.o_all_local)};
+    char *fptr[8] = {(char *)&op.o_id, (char *)&op.o_d_id, (char *)&op.o_w_id, (char *)&op.o_c_id, (char *)&op.o_entry_d, (char *)&op.o_carrier_id, (char *)&op.o_ol_cnt, (char *)&op.o_all_local};
+
     QueryArg q;
+    size_t alloc_size = 0;
+    size_t ptr = 0;
     std::vector<QueryArg> qs(8);
 
-    strcpy(fname, "o_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr0(new uint32_t(op.o_id));
-    std::unique_ptr<uint32_t> after_ptr0(new uint32_t(op.o_id));
-    std::unique_ptr<char[]> field_name_ptr0(new char[flen]);
-    q.before = (char *)before_ptr0.get();
-    q.after = (char *)after_ptr0.get();
-    q.field_name = field_name_ptr0.get();
-    memcpy(q.field_name, fname, flen);
-    qs[0] = q;
+    for(int i=0; i<8; i++){
+      fname_size[i] = strlen(fname[i]) + 1;
+      alloc_size += flen[i]*2 + fname_size[i];
+    }
 
-    strcpy(fname, "o_d_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr1(new uint32_t(op.o_d_id));
-    std::unique_ptr<uint32_t> after_ptr1(new uint32_t(op.o_d_id));
-    std::unique_ptr<char[]> field_name_ptr1(new char[flen]);
-    q.before = (char *)before_ptr1.get();
-    q.after = (char *)after_ptr1.get();
-    q.field_name = field_name_ptr1.get();
-    memcpy(q.field_name, fname, flen);
-    qs[1] = q;
+    char *data = (char *)calloc(1, alloc_size);
+    if(data == NULL){ PERR("calloc"); }
 
-    strcpy(fname, "o_w_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr2(new uint32_t(op.o_w_id));
-    std::unique_ptr<uint32_t> after_ptr2(new uint32_t(op.o_w_id));
-    std::unique_ptr<char[]> field_name_ptr2(new char[flen]);
-    q.before = (char *)before_ptr2.get();
-    q.after = (char *)after_ptr2.get();
-    q.field_name = field_name_ptr2.get();
-    memcpy(q.field_name, fname, flen);
-    qs[2] = q;
+    for(int i=0; i<8; i++){
+      memcpy(data+ptr, fptr[i], flen[i]);
+      memcpy(data+ptr+flen[i], fptr[i], flen[i]);
+      memcpy(data+ptr+flen[i]*2, fname[i], fname_size[i]);
 
-    strcpy(fname, "o_c_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr3(new uint32_t(op.o_c_id));
-    std::unique_ptr<uint32_t> after_ptr3(new uint32_t(op.o_c_id));
-    std::unique_ptr<char[]> field_name_ptr3(new char[flen]);
-    q.before = (char *)before_ptr3.get();
-    q.after = (char *)after_ptr3.get();
-    q.field_name = field_name_ptr3.get();
-    memcpy(q.field_name, fname, flen);
-    qs[3] = q;
+      q.before = data + ptr;
+      q.after = data + ptr + flen[i];
+      q.field_name = data + ptr + flen[i]*2;
 
-    strcpy(fname, "o_entry_d");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<char[]> before_ptr4(new char[32]);
-    strncpy(before_ptr4.get(), op.o_entry_d, sizeof(op.o_entry_d)-1);
-    std::unique_ptr<char[]> after_ptr4(new char[32]);
-    strncpy(after_ptr4.get(), op.o_entry_d, sizeof(op.o_entry_d)-1);
-    std::unique_ptr<char[]> field_name_ptr4(new char[flen]);
-    q.before = (char *)before_ptr4.get();
-    q.after = (char *)after_ptr4.get();
-    q.field_name = field_name_ptr4.get();
-    memcpy(q.field_name, fname, flen);
-    qs[4] = q;
-
-    strcpy(fname, "o_carrier_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr5(new uint32_t(op.o_carrier_id));
-    std::unique_ptr<uint32_t> after_ptr5(new uint32_t(op.o_carrier_id));
-    std::unique_ptr<char[]> field_name_ptr5(new char[flen]);
-    q.before = (char *)before_ptr5.get();
-    q.after = (char *)after_ptr5.get();
-    q.field_name = field_name_ptr5.get();
-    memcpy(q.field_name, fname, flen);
-    qs[5] = q;
-
-    strcpy(fname, "o_ol_cnt");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr6(new uint32_t(op.o_ol_cnt));
-    std::unique_ptr<uint32_t> after_ptr6(new uint32_t(op.o_ol_cnt));
-    std::unique_ptr<char[]> field_name_ptr6(new char[flen]);
-    q.before = (char *)before_ptr6.get();
-    q.after = (char *)after_ptr6.get();
-    q.field_name = field_name_ptr6.get();
-    memcpy(q.field_name, fname, flen);
-    qs[6] = q;
-
-    strcpy(fname, "o_all_local");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr7(new uint32_t(op.o_all_local));
-    std::unique_ptr<uint32_t> after_ptr7(new uint32_t(op.o_all_local));
-    std::unique_ptr<char[]> field_name_ptr7(new char[flen]);
-    q.before = (char *)before_ptr7.get();
-    q.after = (char *)after_ptr7.get();
-    q.field_name = field_name_ptr7.get();
-    memcpy(q.field_name, fname, flen);
-    qs[7] = q;
+      qs[i] = q;
+      ptr += flen[i]*2 + fname_size[i];
+    }
 
     page->page_LSN = ::insert("order", qs, page->page_id, xid, thId);
+    free(data);
 
     insert_list(plist,thId);
   }
@@ -831,56 +782,41 @@ class Stock : public Table{
     }
     lock_page(page->page_id, thId);
 
-    char fname[BUFSIZ];
-    int  flen;
+    char fname[4][BUFSIZ] = {"s_quantity", "s_ytd", "s_order_cnt", "s_remote_cnt"};
+    size_t fname_size[4];
+    int  flen[4] = {sizeof(s_quantity), sizeof(s_ytd), sizeof(s_order_cnt), sizeof(s_remote_cnt)};
+    char *fptr_before[4] = {(char *)&page->s_quantity, (char *)&page->s_ytd, (char *)&page->s_order_cnt, (char *)&page->s_remote_cnt};
+    char *fptr_after[4] = {(char *)&s_quantity, (char *)&s_ytd, (char *)&s_order_cnt, (char *)&s_remote_cnt};
+
     QueryArg q;
+    size_t alloc_size = 0;
+    size_t ptr = 0;
     std::vector<QueryArg> qs(4);
 
-    strcpy(fname, "s_quantity");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr0(new uint32_t(s_quantity));
-    std::unique_ptr<uint32_t> after_ptr0(new uint32_t(s_quantity));
-    std::unique_ptr<char[]> field_name_ptr0(new char[flen]);
-    q.before = (char *)before_ptr0.get();
-    q.after = (char *)after_ptr0.get();
-    q.field_name = field_name_ptr0.get();
-    memcpy(q.field_name, fname, flen);
-    qs[0] = q;
+    for(int i=0; i<4; i++){
+      fname_size[i] = strlen(fname[i]) + 1;
+      alloc_size += flen[i]*2 + fname_size[i];
+    }
 
-    strcpy(fname, "s_ytd");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr1(new uint32_t(s_ytd));
-    std::unique_ptr<uint32_t> after_ptr1(new uint32_t(s_ytd));
-    std::unique_ptr<char[]> field_name_ptr1(new char[flen]);
-    q.before = (char *)before_ptr1.get();
-    q.after = (char *)after_ptr1.get();
-    q.field_name = field_name_ptr1.get();
-    memcpy(q.field_name, fname, flen);
-    qs[1] = q;
 
-    strcpy(fname, "s_order_cnt");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr2(new uint32_t(s_order_cnt));
-    std::unique_ptr<uint32_t> after_ptr2(new uint32_t(s_order_cnt));
-    std::unique_ptr<char[]> field_name_ptr2(new char[flen]);
-    q.before = (char *)before_ptr2.get();
-    q.after = (char *)after_ptr2.get();
-    q.field_name = field_name_ptr2.get();
-    memcpy(q.field_name, fname, flen);
-    qs[2] = q;
+    char *data = (char *)calloc(1, alloc_size);
+    if(data == NULL){ PERR("calloc"); }
 
-    strcpy(fname, "s_remote_cnt");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr3(new uint32_t(s_remote_cnt));
-    std::unique_ptr<uint32_t> after_ptr3(new uint32_t(s_remote_cnt));
-    std::unique_ptr<char[]> field_name_ptr3(new char[flen]);
-    q.before = (char *)before_ptr3.get();
-    q.after = (char *)after_ptr3.get();
-    q.field_name = field_name_ptr3.get();
-    memcpy(q.field_name, fname, flen);
-    qs[3] = q;
+    for(int i=0; i<4; i++){
+      memcpy(data+ptr, fptr_before[i], flen[i]);
+      memcpy(data+ptr+flen[i], fptr_after[i], flen[i]);
+      memcpy(data+ptr+flen[i]*2, fname[i], fname_size[i]);
+
+      q.before = data + ptr;
+      q.after = data + ptr + flen[i];
+      q.field_name = data + ptr + flen[i]*2;
+
+      qs[i] = q;
+      ptr += flen[i]*2 + fname_size[i];
+    }
 
     page->page_LSN = update("stock", qs, page->page_id, xid, thId);
+    free(data);
 
     page->s_quantity = s_quantity;
     page->s_ytd = s_ytd;
@@ -961,126 +897,39 @@ class OrderLine : public Table{
     memcpy(page, &olp, sizeof(PageOrderLine));
     plist->page = page;
 
-    char fname[BUFSIZ];
-    int  flen;
+    char fname[10][BUFSIZ] = {"ol_o_id", "ol_d_id", "ol_w_id", "ol_number", "ol_i_id", "ol_supply_w_id", "ol_delivery_d", "ol_quantity", "ol_amount", "ol_dist_info"};
+    size_t fname_size[10];
+    int  flen[10] = {sizeof(olp.ol_o_id), sizeof(olp.ol_d_id), sizeof(olp.ol_w_id), sizeof(olp.ol_number), sizeof(olp.ol_i_id), sizeof(olp.ol_supply_w_id), sizeof(olp.ol_delivery_d), sizeof(olp.ol_quantity), sizeof(olp.ol_amount), sizeof(olp.ol_dist_info)};
+    char *fptr[10] = {(char *)&olp.ol_o_id, (char *)&olp.ol_d_id, (char *)&olp.ol_w_id, (char *)&olp.ol_number, (char *)&olp.ol_i_id, (char *)&olp.ol_supply_w_id, (char *)&olp.ol_delivery_d, (char *)&olp.ol_quantity, (char *)&olp.ol_amount, (char *)&olp.ol_dist_info};
+
     QueryArg q;
+    size_t alloc_size = 0;
+    size_t ptr = 0;
     std::vector<QueryArg> qs(10);
 
-    strcpy(fname, "ol_o_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr0(new uint32_t(olp.ol_o_id));
-    std::unique_ptr<uint32_t> after_ptr0(new uint32_t(olp.ol_o_id));
-    std::unique_ptr<char[]> field_name_ptr0(new char[flen]);
-    q.before = (char *)before_ptr0.get();
-    q.after = (char *)after_ptr0.get();
-    q.field_name = field_name_ptr0.get();
-    memcpy(q.field_name, fname, flen);
-    qs[0] = q;
+    for(int i=0; i<10; i++){
+      fname_size[i] = strlen(fname[i]) + 1;
+      alloc_size += flen[i]*2 + fname_size[i];
+    }
 
-    strcpy(fname, "ol_d_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr1(new uint32_t(olp.ol_d_id));
-    std::unique_ptr<uint32_t> after_ptr1(new uint32_t(olp.ol_d_id));
-    std::unique_ptr<char[]> field_name_ptr1(new char[flen]);
-    q.before = (char *)before_ptr1.get();
-    q.after = (char *)after_ptr1.get();
-    q.field_name = field_name_ptr1.get();
-    memcpy(q.field_name, fname, flen);
-    qs[1] = q;
+    char *data = (char *)calloc(1, alloc_size);
+    if(data == NULL){ PERR("calloc"); }
 
-    strcpy(fname, "ol_w_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr2(new uint32_t(olp.ol_w_id));
-    std::unique_ptr<uint32_t> after_ptr2(new uint32_t(olp.ol_w_id));
-    std::unique_ptr<char[]> field_name_ptr2(new char[flen]);
-    q.before = (char *)before_ptr2.get();
-    q.after = (char *)after_ptr2.get();
-    q.field_name = field_name_ptr2.get();
-    memcpy(q.field_name, fname, flen);
-    qs[2] = q;
+    for(int i=0; i<10; i++){
+      memcpy(data+ptr, fptr[i], flen[i]);
+      memcpy(data+ptr+flen[i], fptr[i], flen[i]);
+      memcpy(data+ptr+flen[i]*2, fname[i], fname_size[i]);
 
-    strcpy(fname, "ol_number");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr3(new uint32_t(olp.ol_number));
-    std::unique_ptr<uint32_t> after_ptr3(new uint32_t(olp.ol_number));
-    std::unique_ptr<char[]> field_name_ptr3(new char[flen]);
-    q.before = (char *)before_ptr3.get();
-    q.after = (char *)after_ptr3.get();
-    q.field_name = field_name_ptr3.get();
-    memcpy(q.field_name, fname, flen);
-    qs[3] = q;
+      q.before = data + ptr;
+      q.after = data + ptr + flen[i];
+      q.field_name = data + ptr + flen[i]*2;
 
-    strcpy(fname, "ol_i_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr4(new uint32_t(olp.ol_i_id));
-    std::unique_ptr<uint32_t> after_ptr4(new uint32_t(olp.ol_i_id));
-    std::unique_ptr<char[]> field_name_ptr4(new char[flen]);
-    q.before = (char *)before_ptr4.get();
-    q.after = (char *)after_ptr4.get();
-    q.field_name = field_name_ptr4.get();
-    memcpy(q.field_name, fname, flen);
-    qs[4] = q;
-
-    strcpy(fname, "ol_supply_w_id");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr5(new uint32_t(olp.ol_supply_w_id));
-    std::unique_ptr<uint32_t> after_ptr5(new uint32_t(olp.ol_supply_w_id));
-    std::unique_ptr<char[]> field_name_ptr5(new char[flen]);
-    q.before = (char *)before_ptr5.get();
-    q.after = (char *)after_ptr5.get();
-    q.field_name = field_name_ptr5.get();
-    memcpy(q.field_name, fname, flen);
-    qs[5] = q;
-
-    strcpy(fname, "ol_delivery_d");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<char[]> before_ptr6(new char[20]);
-    strncpy(before_ptr6.get(), olp.ol_delivery_d, sizeof(olp.ol_delivery_d)-1);
-    std::unique_ptr<char[]> after_ptr6(new char[20]);
-    strncpy(after_ptr6.get(), olp.ol_delivery_d, sizeof(olp.ol_delivery_d)-1);
-    std::unique_ptr<char[]> field_name_ptr6(new char[flen]);
-    q.before = (char *)before_ptr6.get();
-    q.after = (char *)after_ptr6.get();
-    q.field_name = field_name_ptr6.get();
-    memcpy(q.field_name, fname, flen);
-    qs[6] = q;
-
-    strcpy(fname, "ol_quantity");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<uint32_t> before_ptr7(new uint32_t(olp.ol_quantity));
-    std::unique_ptr<uint32_t> after_ptr7(new uint32_t(olp.ol_quantity));
-    std::unique_ptr<char[]> field_name_ptr7(new char[flen]);
-    q.before = (char *)before_ptr7.get();
-    q.after = (char *)after_ptr7.get();
-    q.field_name = field_name_ptr7.get();
-    memcpy(q.field_name, fname, flen);
-    qs[7] = q;
-
-    strcpy(fname, "ol_amount");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<double> before_ptr8(new double(olp.ol_amount));
-    std::unique_ptr<double> after_ptr8(new double(olp.ol_amount));
-    std::unique_ptr<char[]> field_name_ptr8(new char[flen]);
-    q.before = (char *)before_ptr8.get();
-    q.after = (char *)after_ptr8.get();
-    q.field_name = field_name_ptr8.get();
-    memcpy(q.field_name, fname, flen);
-    qs[8] = q;
-
-    strcpy(fname, "ol_dist_info");
-    flen = strlen(fname) + 1;
-    std::unique_ptr<char[]> before_ptr9(new char[25]);
-    std::unique_ptr<char[]> after_ptr9(new char[25]);
-    strncpy(before_ptr9.get(), olp.ol_dist_info, sizeof(olp.ol_dist_info)-1);
-    strncpy(before_ptr9.get(), olp.ol_dist_info, sizeof(olp.ol_dist_info)-1);
-    std::unique_ptr<char[]> field_name_ptr9(new char[flen]);
-    q.before = (char *)before_ptr9.get();
-    q.after = (char *)after_ptr9.get();
-    q.field_name = field_name_ptr9.get();
-    memcpy(q.field_name, fname, flen);
-    qs[9] = q;
+      qs[i] = q;
+      ptr += flen[i]*2 + fname_size[i];
+    }
 
     page->page_LSN = ::insert("order_line", qs, page->page_id, xid, thId);
+    free(data);
 
     insert_list(plist,thId);
   }
